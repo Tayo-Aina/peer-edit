@@ -9,12 +9,12 @@ import { Awareness } from 'y-protocols/awareness';
 interface RelayDoc {
   doc: Y.Doc;
   awareness: Awareness;
-  clients: Map<WebSocket, Set<number>>;
+  clients: Map<WebSocket, boolean>;
 }
 
-// y-websocket message type constants
 const messageSync = 0;
 const messageAwareness = 1;
+const messageAuth = 2;
 const messageQueryAwareness = 3;
 
 export class RelayServer {
@@ -32,7 +32,6 @@ export class RelayServer {
       const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
       const roomName = url.pathname.slice(1).split('?')[0] || 'default';
 
-      // Get or create shared doc + awareness for this room
       let relayDoc = this.docs.get(roomName);
       if (!relayDoc) {
         const doc = new Y.Doc();
@@ -40,120 +39,133 @@ export class RelayServer {
         relayDoc = { doc, awareness, clients: new Map() };
         this.docs.set(roomName, relayDoc);
 
-        // Broadcast document updates to all OTHER clients
         doc.on('update', (update: Uint8Array, origin: any) => {
-          const encoder = encoding.createEncoder();
-          encoding.writeVarUint(encoder, messageSync);
-          syncProtocol.writeUpdate(encoder, update);
-          const message = encoding.toUint8Array(encoder);
+          const enc = encoding.createEncoder();
+          encoding.writeVarUint(enc, messageSync);
+          syncProtocol.writeUpdate(enc, update);
+          const msg = encoding.toUint8Array(enc);
           relayDoc!.clients.forEach((_, client) => {
             if (client !== origin && client.readyState === WebSocket.OPEN) {
-              client.send(message);
+              client.send(msg);
             }
           });
         });
 
-        // Broadcast awareness changes to all OTHER clients
         awareness.on('update', ({ added, updated, removed }: any, origin: any) => {
-          const changedClients = added.concat(updated).concat(removed);
-          
-          if (origin !== null && relayDoc!.clients.has(origin)) {
-            const connControlledIDs = relayDoc!.clients.get(origin)!;
-            added.forEach((clientId: number) => { connControlledIDs.add(clientId); });
-            removed.forEach((clientId: number) => { connControlledIDs.delete(clientId); });
-          }
-
-          const encoder = encoding.createEncoder();
-          encoding.writeVarUint(encoder, messageAwareness);
+          const changedClients = ([] as number[]).concat(added, updated, removed);
+          const enc = encoding.createEncoder();
+          encoding.writeVarUint(enc, messageAwareness);
           encoding.writeVarUint8Array(
-            encoder,
+            enc,
             awarenessProtocol.encodeAwarenessUpdate(relayDoc!.awareness, changedClients)
           );
-          const message = encoding.toUint8Array(encoder);
+          const msg = encoding.toUint8Array(enc);
           relayDoc!.clients.forEach((_, client) => {
             if (client !== origin && client.readyState === WebSocket.OPEN) {
-              client.send(message);
+              client.send(msg);
             }
           });
         });
       }
 
-      relayDoc.clients.set(ws, new Set());
-      console.log(`[Relay] Client connected to room "${roomName}" (total: ${relayDoc.clients.size})`);
+      relayDoc.clients.set(ws, true);
+      console.log(
+        `[Relay] Client connected to room "${roomName}" (total: ${relayDoc.clients.size})`
+      );
 
-      // send sync step 1 and awareness state immediately to this new client
+      // Send sync step 1 + existing awareness state immediately to new client
       {
-        const encoder = encoding.createEncoder();
-        encoding.writeVarUint(encoder, messageSync);
-        syncProtocol.writeSyncStep1(encoder, relayDoc.doc);
-        ws.send(encoding.toUint8Array(encoder));
+        const enc = encoding.createEncoder();
+        encoding.writeVarUint(enc, messageSync);
+        syncProtocol.writeSyncStep1(enc, relayDoc.doc);
+        ws.send(encoding.toUint8Array(enc));
 
         const awarenessStates = relayDoc.awareness.getStates();
         if (awarenessStates.size > 0) {
-          const awEncoder = encoding.createEncoder();
-          encoding.writeVarUint(awEncoder, messageAwareness);
-          encoding.writeVarUint8Array(awEncoder, awarenessProtocol.encodeAwarenessUpdate(relayDoc.awareness, Array.from(awarenessStates.keys())));
-          ws.send(encoding.toUint8Array(awEncoder));
+          const awEnc = encoding.createEncoder();
+          encoding.writeVarUint(awEnc, messageAwareness);
+          encoding.writeVarUint8Array(
+            awEnc,
+            awarenessProtocol.encodeAwarenessUpdate(
+              relayDoc.awareness,
+              Array.from(awarenessStates.keys())
+            )
+          );
+          ws.send(encoding.toUint8Array(awEnc));
         }
       }
 
-      // Handle messages from this client
+      // Handle incoming messages — wrap in try/catch so one bad message
+      // doesn't kill the connection handler
       ws.on('message', (rawData: Buffer) => {
-        const data = new Uint8Array(rawData);
-        const decoder = decoding.createDecoder(data);
-        const encoder = encoding.createEncoder();
-        const messageType = decoding.readVarUint(decoder);
+        try {
+          const data = new Uint8Array(rawData);
+          const decoder = decoding.createDecoder(data);
+          const encoder = encoding.createEncoder();
+          const messageType = decoding.readVarUint(decoder);
 
-        switch (messageType) {
-          case messageSync: {
-            // Sync protocol: handles sync step 1, step 2, and document updates internally.
-            // readSyncMessage reads the sub-type, processes it, and writes any response.
-            // We pass ws as the origin so we can filter it in the 'update' broadcast above.
-            encoding.writeVarUint(encoder, messageSync);
-            syncProtocol.readSyncMessage(decoder, encoder, relayDoc!.doc, ws);
-            // Send response back to this client only if there's data beyond the message type
-            if (encoding.length(encoder) > 1) {
-              ws.send(encoding.toUint8Array(encoder));
+          switch (messageType) {
+            case messageSync: {
+              encoding.writeVarUint(encoder, messageSync);
+              syncProtocol.readSyncMessage(decoder, encoder, relayDoc!.doc, ws);
+              if (encoding.length(encoder) > 1) {
+                ws.send(encoding.toUint8Array(encoder));
+              }
+              break;
             }
-            break;
-          }
-          case messageAwareness: {
-            // Apply the awareness update to the shared awareness state
-            awarenessProtocol.applyAwarenessUpdate(
-              relayDoc!.awareness,
-              decoding.readVarUint8Array(decoder),
-              ws // origin so we don't echo back
-            );
-            break;
-          }
-          case messageQueryAwareness: {
-            // Client is asking for the current awareness state
-            encoding.writeVarUint(encoder, messageAwareness);
-            encoding.writeVarUint8Array(
-              encoder,
-              awarenessProtocol.encodeAwarenessUpdate(
+            case messageAwareness: {
+              awarenessProtocol.applyAwarenessUpdate(
                 relayDoc!.awareness,
-                Array.from(relayDoc!.awareness.getStates().keys())
-              )
-            );
-            ws.send(encoding.toUint8Array(encoder));
-            break;
+                decoding.readVarUint8Array(decoder),
+                ws
+              );
+              break;
+            }
+            case messageQueryAwareness: {
+              encoding.writeVarUint(encoder, messageAwareness);
+              encoding.writeVarUint8Array(
+                encoder,
+                awarenessProtocol.encodeAwarenessUpdate(
+                  relayDoc!.awareness,
+                  Array.from(relayDoc!.awareness.getStates().keys())
+                )
+              );
+              ws.send(encoding.toUint8Array(encoder));
+              break;
+            }
+            case messageAuth: {
+              // auth messages — acknowledge and move on
+              break;
+            }
           }
+        } catch (err: any) {
+          console.error(`[Relay] Message handler error:`, err.message);
         }
       });
 
+      // Keepalive: ping every 15s to prevent y-websocket's 30s idle timeout
+      // from killing the connection
+      let isAlive = true;
+      ws.on('pong', () => { isAlive = true; });
+      const pingTimer = setInterval(() => {
+        if (!isAlive) {
+          clearInterval(pingTimer);
+          ws.terminate();
+          return;
+        }
+        isAlive = false;
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.ping();
+        }
+      }, 15000);
+
       ws.on('close', () => {
+        clearInterval(pingTimer);
         if (relayDoc) {
-          const controlledIds = relayDoc.clients.get(ws);
           relayDoc.clients.delete(ws);
-          if (controlledIds && controlledIds.size > 0) {
-            awarenessProtocol.removeAwarenessStates(relayDoc.awareness, Array.from(controlledIds), null);
-          }
-          
           console.log(
             `[Relay] Client left room "${roomName}" (remaining: ${relayDoc.clients.size})`
           );
-          
           if (relayDoc.clients.size === 0) {
             relayDoc.doc.destroy();
             this.docs.delete(roomName);
@@ -162,6 +174,7 @@ export class RelayServer {
       });
 
       ws.on('error', (err) => {
+        clearInterval(pingTimer);
         console.error(`[Relay] WebSocket error:`, err.message);
       });
     });

@@ -4,6 +4,12 @@ import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import Placeholder from '@tiptap/extension-placeholder';
+import Underline from '@tiptap/extension-underline';
+import TextAlign from '@tiptap/extension-text-align';
+import Highlight from '@tiptap/extension-highlight';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
+import Link from '@tiptap/extension-link';
 import { useCollaboration } from '../providers/CollaborationProvider';
 import { Toolbar } from './Toolbar';
 
@@ -27,6 +33,19 @@ export function EditorView() {
       }),
       Placeholder.configure({
         placeholder: 'Start typing collaboratively...',
+      }),
+      Underline,
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+      }),
+      Highlight,
+      TaskList,
+      TaskItem.configure({
+        nested: true,
+      }),
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
       }),
     ],
     // Do NOT set initial content. The Yjs document provides the content.

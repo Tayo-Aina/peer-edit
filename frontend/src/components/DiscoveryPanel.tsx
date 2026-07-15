@@ -30,8 +30,10 @@ export function DiscoveryPanel({ onConnect, connected }: DiscoveryPanelProps) {
   return (
     <div className="discovery-overlay">
       <div className="discovery-panel">
-        <h1>PeerEdit</h1>
-        <p className="discovery-subtitle">Collaborative Rich Text Editor</p>
+        <div className="discovery-header">
+          <h1>PeerEdit</h1>
+          <p className="discovery-subtitle">Collaborative Rich Text Editor</p>
+        </div>
 
         <section className="discovery-section">
           <h2>Discovered Relays</h2>

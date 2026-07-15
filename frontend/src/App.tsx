@@ -42,8 +42,8 @@ export default function App() {
           </header>
           <main>
             <EditorView />
-            <UserPresence />
           </main>
+          <UserPresence />
         </CollaborationProvider>
       )}
     </div>

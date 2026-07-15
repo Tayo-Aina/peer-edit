@@ -142,27 +142,7 @@ export class RelayServer {
         }
       });
 
-      // Keepalive: ping every 15 seconds to prevent y-websocket's 30-second
-      // idle timeout from killing the connection. The y-websocket client treats
-      // any incoming WebSocket frame (including pong responses to our pings)
-      // as proof the connection is alive.
-      let isAlive = true;
-      ws.on('pong', () => { isAlive = true; });
-      const pingInterval = setInterval(() => {
-        if (!isAlive) {
-          // Client didn't respond to last ping — terminate
-          clearInterval(pingInterval);
-          ws.terminate();
-          return;
-        }
-        isAlive = false;
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.ping();
-        }
-      }, 15000);
-
       ws.on('close', () => {
-        clearInterval(pingInterval);
         if (relayDoc) {
           const controlledIds = relayDoc.clients.get(ws);
           relayDoc.clients.delete(ws);

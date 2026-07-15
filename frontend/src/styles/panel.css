@@ -1,149 +1,213 @@
-/* Discovery Panel Overlay - Now a clean full page welcome screen */
+/* ---- Discovery Overlay ---- */
+
 .discovery-overlay {
   position: fixed;
   inset: 0;
-  background-color: var(--bg-surface);
   display: flex;
-  justify-content: center;
   align-items: center;
-  z-index: 1000;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px);
+  z-index: 100;
 }
 
 .discovery-panel {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  width: 100%;
-  max-width: 500px;
-  padding: 2.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
+  background: #fff;
+  border-radius: 16px;
+  padding: 36px 40px;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
 }
 
-.discovery-header {
-  text-align: center;
-}
-
-.discovery-header h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--text-main);
-  letter-spacing: -0.025em;
-  margin-bottom: 0.25rem;
+.discovery-panel h1 {
+  font-size: 28px;
+  margin: 0 0 4px;
+  color: #1a1a2e;
 }
 
 .discovery-subtitle {
-  color: var(--text-muted);
-  font-size: 1rem;
+  color: #888;
+  margin: 0 0 28px;
+  font-size: 14px;
+}
+
+.discovery-section {
+  margin-bottom: 24px;
 }
 
 .discovery-section h2 {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-main);
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #555;
+  margin: 0 0 10px;
 }
 
 .discovery-empty {
-  color: var(--text-muted);
-  font-size: 0.875rem;
-  text-align: center;
-  padding: 1rem;
-  background-color: var(--bg-color);
-  border-radius: var(--radius-md);
-  margin-top: 1rem;
+  color: #aaa;
+  font-size: 13px;
+  font-style: italic;
 }
 
 .peer-list {
   list-style: none;
-  margin-top: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  padding: 0;
+  margin: 8px 0 0;
 }
 
 .peer-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 0.75rem 1rem;
-  background-color: var(--bg-color);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  margin-bottom: 6px;
 }
 
 .peer-label {
-  font-weight: 500;
-  color: var(--text-main);
+  font-size: 14px;
+  font-family: monospace;
+  color: #333;
 }
 
 .manual-form {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .manual-form input {
-  padding: 0.625rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
+  flex: 1;
+  min-width: 100px;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
   outline: none;
-  transition: border-color 0.2s;
 }
 
 .manual-form input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
+  border-color: #6b8cff;
 }
 
-/* User Presence Sidebar (previously floating) */
-.user-presence-sidebar {
-  width: 250px;
-  background-color: var(--bg-surface);
-  border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
+/* ---- Shared Buttons ---- */
+
+.btn {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
 }
 
-.user-presence-header {
-  padding: 1rem 1.5rem;
-  font-weight: 600;
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid var(--border);
+.btn:hover {
+  background: #f5f5f5;
 }
 
-.user-presence-list {
-  list-style: none;
-  padding: 1rem 1.5rem;
-  overflow-y: auto;
+.btn-primary {
+  background: #4f46e5;
+  color: #fff;
+  border-color: #4f46e5;
 }
 
-.user-presence-list li {
+.btn-primary:hover {
+  background: #4338ca;
+}
+
+.btn-secondary {
+  font-size: 13px;
+}
+
+/* ---- App Header ---- */
+
+.app-header {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-main);
+  justify-content: space-between;
+  padding: 16px 32px;
+  border-bottom: 1px solid #eee;
 }
 
-.user-avatar {
-  width: 24px;
-  height: 24px;
+.app-header h1 {
+  font-size: 20px;
+  margin: 0;
+  color: #1a1a2e;
+}
+
+main {
+  padding: 24px;
+}
+
+/* ---- Status Indicator ---- */
+
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #666;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
+}
+
+.status-dot.connected {
+  background: #22c55e;
+}
+
+.status-dot.connecting {
+  background: #f59e0b;
+  animation: pulse 1s infinite;
+}
+
+.status-dot.disconnected {
+  background: #ef4444;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ---- Presence Sidebar ---- */
+
+.presence-sidebar {
+  position: fixed;
+  right: 20px;
+  top: 20px;
+  width: 200px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+}
+
+.presence-sidebar h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #888;
+  margin: 0 0 10px;
+}
+
+.presence-user {
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 0.75rem;
-  font-weight: bold;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.presence-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }

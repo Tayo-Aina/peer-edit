@@ -8,7 +8,7 @@ import { useCollaboration } from '../providers/CollaborationProvider';
 import { Toolbar } from './Toolbar';
 
 export function EditorView() {
-  const { ydoc, provider, awareness } = useCollaboration();
+  const { ydoc, provider, userName, color } = useCollaboration();
 
   const editor = useEditor({
     extensions: [
@@ -23,7 +23,7 @@ export function EditorView() {
       }),
       CollaborationCursor.configure({
         provider: provider,
-        user: awareness.getLocalState() ?? { name: 'Unknown', color: '#999' },
+        user: { name: userName, color: color },
       }),
       Placeholder.configure({
         placeholder: 'Start typing collaboratively...',
@@ -32,7 +32,7 @@ export function EditorView() {
     // Do NOT set initial content. The Yjs document provides the content.
     // Setting content here would overwrite the shared Y.Doc on every mount.
     autofocus: true,
-  });
+  }, [ydoc, provider, userName, color]);
 
   return (
     <div className="editor-container">

@@ -8,6 +8,8 @@ interface CollaborationContextValue {
   ydoc: Y.Doc;
   provider: WebsocketProvider;
   awareness: WebsocketProvider['awareness'];
+  userName: string;
+  color: string;
 }
 
 const CollaborationContext = createContext<CollaborationContextValue | null>(null);
@@ -20,21 +22,13 @@ interface Props {
 }
 
 export function CollaborationProvider({ relayUrl, roomName, userName, children }: Props) {
-  const ydocRef = useRef<Y.Doc | null>(null);
-  const providerRef = useRef<WebsocketProvider | null>(null);
+  const [value, setValue] = React.useState<CollaborationContextValue | null>(null);
 
-  const value = useMemo(() => {
-    // Destroy previous if URL/room changes
-    providerRef.current?.destroy();
-    ydocRef.current?.destroy();
-
+  useEffect(() => {
     const ydoc = new Y.Doc();
-    ydocRef.current = ydoc;
-
     const provider = new WebsocketProvider(relayUrl, roomName, ydoc, {
       connect: true,
     });
-    providerRef.current = provider;
 
     const displayName = userName ?? getFriendlyName();
     const color = getUserColor(ydoc.clientID);
@@ -46,16 +40,23 @@ export function CollaborationProvider({ relayUrl, roomName, userName, children }
       cursor: null,
     });
 
-    return { ydoc, provider, awareness: provider.awareness };
+    setValue({
+      ydoc,
+      provider,
+      awareness: provider.awareness,
+      userName: displayName,
+      color,
+    });
+
+    return () => {
+      provider.destroy();
+      ydoc.destroy();
+    };
   }, [relayUrl, roomName, userName]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      providerRef.current?.destroy();
-      ydocRef.current?.destroy();
-    };
-  }, []);
+  if (!value) {
+    return <div className="loading-state">Connecting to collaboration server...</div>;
+  }
 
   return (
     <CollaborationContext.Provider value={value}>

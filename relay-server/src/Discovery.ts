@@ -1,4 +1,4 @@
-import Bonjour from 'bonjour-service';
+import { Bonjour } from 'bonjour-service';
 
 const SERVICE_TYPE = 'peeredit';
 const PROTOCOL = 'tcp';
@@ -26,7 +26,7 @@ interface BonjourService {
 type EventHandler = (payload: any) => void;
 
 export class Discovery {
-  private bonjour: Bonjour;
+  private bonjour: InstanceType<typeof Bonjour>;
   private service: any = null;
   private browser: any = null;
   private listeners: Map<keyof DiscoveryEvents, Set<EventHandler>> = new Map();

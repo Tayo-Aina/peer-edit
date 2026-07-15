@@ -83,17 +83,6 @@ export function Toolbar({ editor }: ToolbarProps) {
         active={editor.isActive('codeBlock')}
         label="Code"
       />
-      <span className="toolbar-sep" />
-      <Button
-        onClick={() => editor.chain().focus().undo().run()}
-        active={false}
-        label="↩ Undo"
-      />
-      <Button
-        onClick={() => editor.chain().focus().redo().run()}
-        active={false}
-        label="↪ Redo"
-      />
     </div>
   );
 }

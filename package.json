@@ -1,0 +1,14 @@
+{
+  "name": "peer-edit",
+  "private": true,
+  "workspaces": ["relay-server", "frontend"],
+  "scripts": {
+    "relay": "npm run dev -w relay-server",
+    "app": "npm run dev -w frontend",
+    "dev": "concurrently \"npm run relay\" \"npm run app\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.5.0"
+  }
+}

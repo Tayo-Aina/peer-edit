@@ -28,6 +28,13 @@ export function CollaborationProvider({ relayUrl, roomName, userName, children }
     const ydoc = new Y.Doc();
     const provider = new WebsocketProvider(relayUrl, roomName, ydoc, {
       connect: true,
+      // CRITICAL: Send a sync message every 10 seconds. The y-websocket client
+      // has a 30-second idle timeout — if no data message is received from the
+      // server in 30 seconds, it kills the connection. Our relay only forwards
+      // to OTHER clients (never back to sender), so an idle client receives
+      // nothing and gets disconnected. resyncInterval forces a periodic
+      // server response that keeps the connection alive.
+      resyncInterval: 10000,
     });
 
     const displayName = userName ?? getFriendlyName();

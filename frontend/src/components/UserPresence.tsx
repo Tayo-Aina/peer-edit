@@ -15,11 +15,11 @@ export function UserPresence() {
           <li key={user.clientId}>
             <div
               className="user-avatar"
-              style={{ backgroundColor: user.color }}
+              style={{ backgroundColor: user.color || '#999' }}
             >
-              {user.name.charAt(0).toUpperCase()}
+              {(user.name || '?').charAt(0).toUpperCase()}
             </div>
-            <span>{user.name}</span>
+            <span>{user.name || 'Unknown'}</span>
             {user.clientId === self?.clientId && (
               <span style={{ color: 'var(--text-muted)' }}>(you)</span>
             )}

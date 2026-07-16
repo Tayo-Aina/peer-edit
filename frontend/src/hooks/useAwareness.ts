@@ -27,14 +27,28 @@ export function useAwareness(): {
   }, [awareness]);
 
   const selfId = awareness.clientID;
+
+  // Safely build a RemoteUser from raw awareness state.
+  // Remote states can be null (disconnecting) or missing fields.
+  function toRemoteUser(clientId: number, raw: any): RemoteUser | null {
+    if (!raw || typeof raw !== 'object') return null;
+    return {
+      clientId,
+      name: typeof raw.name === 'string' ? raw.name : 'Unknown',
+      color: typeof raw.color === 'string' ? raw.color : '#999999',
+      cursor: raw.cursor ?? null,
+    };
+  }
+
   const self: RemoteUser | null = state.has(selfId)
-    ? { clientId: selfId, ...state.get(selfId) }
+    ? toRemoteUser(selfId, state.get(selfId))
     : null;
 
   const others: RemoteUser[] = [];
-  state.forEach((val, key) => {
+  state.forEach((raw, key) => {
     if (key !== selfId) {
-      others.push({ clientId: key, ...val });
+      const user = toRemoteUser(key, raw);
+      if (user) others.push(user);
     }
   });
 

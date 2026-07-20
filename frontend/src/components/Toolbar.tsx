@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { Editor } from '@tiptap/react';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, Highlighter,
@@ -6,7 +6,8 @@ import {
   Heading1, Heading2, Heading3,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, CheckSquare,
-  Quote, SquareTerminal, Link as LinkIcon
+  Quote, SquareTerminal, Link as LinkIcon,
+  Download,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -21,7 +22,35 @@ interface ToolbarButtonProps {
   title: string;
 }
 
+function downloadBlob(content: string, filename: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export function Toolbar({ editor }: ToolbarProps) {
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    }
+    if (exportOpen) {
+      document.addEventListener('mousedown', handleClick);
+    }
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [exportOpen]);
+
   if (!editor) return null;
 
   const Button = ({ onClick, active, disabled, icon, title }: ToolbarButtonProps) => (
@@ -39,17 +68,30 @@ export function Toolbar({ editor }: ToolbarProps) {
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href;
     const url = window.prompt('URL', previousUrl);
-
-    if (url === null) {
-      return; // cancelled
-    }
-
+    if (url === null) return;
     if (url === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run();
       return;
     }
-
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+  }, [editor]);
+
+  const handleExportHTML = useCallback(() => {
+    const html = editor.getHTML();
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    downloadBlob(
+      `<!DOCTYPE html>\n<html lang="en">\n<head><meta charset="UTF-8"><title>PeerEdit Export</title></head>\n<body>\n${html}\n</body>\n</html>`,
+      `peeredit-${ts}.html`,
+      'text/html',
+    );
+    setExportOpen(false);
+  }, [editor]);
+
+  const handleExportTXT = useCallback(() => {
+    const text = editor.getText();
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    downloadBlob(text, `peeredit-${ts}.txt`, 'text/plain');
+    setExportOpen(false);
   }, [editor]);
 
   return (
@@ -206,6 +248,39 @@ export function Toolbar({ editor }: ToolbarProps) {
           icon={<SquareTerminal size={16} />}
           title="Code Block"
         />
+      </div>
+
+      {/* Spacer pushes export to the right */}
+      <div className="toolbar-spacer" />
+
+      {/* Export dropdown */}
+      <div className="toolbar-group toolbar-export" ref={exportRef}>
+        <button
+          type="button"
+          className="toolbar-btn"
+          onClick={() => setExportOpen(!exportOpen)}
+          title="Export document"
+        >
+          <Download size={16} />
+        </button>
+        {exportOpen && (
+          <div className="export-menu">
+            <button
+              type="button"
+              className="export-menu-item"
+              onClick={handleExportHTML}
+            >
+              Export as HTML
+            </button>
+            <button
+              type="button"
+              className="export-menu-item"
+              onClick={handleExportTXT}
+            >
+              Export as Plain Text
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

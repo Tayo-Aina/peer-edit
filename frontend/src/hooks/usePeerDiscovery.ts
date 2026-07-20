@@ -37,6 +37,7 @@ export function usePeerDiscovery() {
       }
     }
 
+
     // Strategy 2: Scan local subnet
     const subnet = getLocalSubnet();
     if (subnet) {

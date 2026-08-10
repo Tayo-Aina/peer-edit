@@ -10,6 +10,8 @@ interface RelayDoc {
   doc: Y.Doc;
   awareness: Awareness;
   clients: Map<WebSocket, boolean>;
+  /** clientIDs each WebSocket has contributed to awareness (for cleanup on close). */
+  awarenessClients: Map<WebSocket, Set<number>>;
 }
 
 const messageSync = 0;
@@ -25,6 +27,10 @@ export class RelayServer {
   constructor(port: number) {
     this.port = port;
     this.wss = new WebSocketServer({ port, host: '0.0.0.0' });
+    // Don't crash the whole process if the port is taken or the socket errors.
+    this.wss.on('error', (err: Error) => {
+      console.error(`[Relay] WebSocket server error:`, err.message);
+    });
   }
 
   start(): void {
@@ -36,7 +42,10 @@ export class RelayServer {
       if (!relayDoc) {
         const doc = new Y.Doc();
         const awareness = new Awareness(doc);
-        relayDoc = { doc, awareness, clients: new Map() };
+        // The Awareness constructor seeds a local `{}` state. The relay must
+        // NOT appear as an anonymous "Unknown" user in every room, so drop it.
+        awareness.setLocalState(null);
+        relayDoc = { doc, awareness, clients: new Map(), awarenessClients: new Map() };
         this.docs.set(roomName, relayDoc);
 
         doc.on('update', (update: Uint8Array, origin: any) => {
@@ -52,6 +61,20 @@ export class RelayServer {
         });
 
         awareness.on('update', ({ added, updated, removed }: any, origin: any) => {
+          // Track which clientIDs came from each socket so they can be removed
+          // immediately when that socket closes (no ghost "unknown" users).
+          if (origin instanceof WebSocket) {
+            let ids = relayDoc!.awarenessClients.get(origin);
+            if (!ids) {
+              ids = new Set<number>();
+              relayDoc!.awarenessClients.set(origin, ids);
+            }
+            (added || []).forEach((id: number) => ids!.add(id));
+            (removed || []).forEach((id: number) => ids!.delete(id));
+          }
+          console.log(
+            `[Relay] awareness ${roomName}: +${(added || []).length} ~${(updated || []).length} -${(removed || []).length} from ${origin instanceof WebSocket ? 'ws' : 'internal'}`
+          );
           const changedClients = ([] as number[]).concat(added, updated, removed);
           const enc = encoding.createEncoder();
           encoding.writeVarUint(enc, messageAwareness);
@@ -163,6 +186,18 @@ export class RelayServer {
         clearInterval(pingTimer);
         if (relayDoc) {
           relayDoc.clients.delete(ws);
+          // Remove this socket's awareness states immediately so other clients
+          // don't keep seeing a stale/nameless user.
+          const ids = relayDoc.awarenessClients.get(ws);
+          if (ids && ids.size > 0) {
+            awarenessProtocol.removeAwarenessStates(
+              relayDoc.awareness,
+              Array.from(ids),
+              null
+            );
+            console.log(`[Relay] awareness cleanup: removed ${ids.size} ids for closed ws`);
+          }
+          relayDoc.awarenessClients.delete(ws);
           console.log(
             `[Relay] Client left room "${roomName}" (remaining: ${relayDoc.clients.size})`
           );

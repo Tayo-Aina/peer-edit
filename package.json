@@ -1,11 +1,12 @@
 {
   "name": "peer-edit",
   "private": true,
-  "workspaces": ["relay-server", "frontend"],
+  "workspaces": ["relay-server", "frontend", "desktop"],
   "scripts": {
     "relay": "npm run dev -w relay-server",
     "app": "npm run dev -w frontend",
-    "dev": "concurrently \"npm run relay\" \"npm run app\""
+    "dev": "concurrently \"npm run relay\" \"npm run app\"",
+    "build:exe": "node desktop/build.mjs"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

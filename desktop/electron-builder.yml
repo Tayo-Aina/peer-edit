@@ -1,0 +1,17 @@
+appId: com.peeredit.app
+productName: PeerEdit
+electronVersion: 33.4.11
+directories:
+  output: release
+  buildResources: build
+files:
+  - entry.js
+  - bundle/**/*
+npmRebuild: false
+win:
+  icon: build/icon.ico
+  target:
+    - target: portable
+      arch: x64
+portable:
+  artifactName: PeerEdit.exe

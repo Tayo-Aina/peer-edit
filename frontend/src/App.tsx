@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { CollaborationProvider } from './providers/CollaborationProvider';
 import { DiscoveryPanel } from './components/DiscoveryPanel';
 import { EditorView } from './components/EditorView';
@@ -8,9 +8,21 @@ import './styles/editor.css';
 import './styles/panel.css';
 
 export default function App() {
-  const [relayUrl, setRelayUrl] = useState<string | null>(null);
+  // The desktop shell appends ?instance=N&relay=ws://... for additional windows
+  // opened on the same machine (auto-connect + a distinguishable title).
+  const params = new URLSearchParams(window.location.search);
+  const initialRelay = params.get('relay');
+  const instanceLabel = params.get('instance');
+
+  const [relayUrl, setRelayUrl] = useState<string | null>(initialRelay);
   const [roomName] = useState('default-doc');
   const [userName] = useState(() => getFriendlyName());
+
+  useEffect(() => {
+    if (instanceLabel) {
+      document.title = `PeerEdit (${instanceLabel})`;
+    }
+  }, [instanceLabel]);
 
   const handleConnect = useCallback((url: string) => {
     setRelayUrl(url);

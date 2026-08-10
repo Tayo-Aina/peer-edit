@@ -27,7 +27,10 @@ export function CollaborationProvider({ relayUrl, roomName, userName, children }
   useEffect(() => {
     const ydoc = new Y.Doc();
     const provider = new WebsocketProvider(relayUrl, roomName, ydoc, {
-      connect: true,
+      // Connect manually AFTER setting awareness: the Awareness constructor
+      // seeds an empty `{}` local state, and broadcasting that would show us
+      // as an "Unknown" user. Set the real name/color first.
+      connect: false,
       // CRITICAL: Send a sync message every 10 seconds. The y-websocket client
       // has a 30-second idle timeout — if no data message is received from the
       // server in 30 seconds, it kills the connection. Our relay only forwards
@@ -40,12 +43,13 @@ export function CollaborationProvider({ relayUrl, roomName, userName, children }
     const displayName = userName ?? getFriendlyName();
     const color = getUserColor(ydoc.clientID);
 
-    // Set local awareness state
+    // Set local awareness state BEFORE connecting.
     provider.awareness.setLocalState({
       name: displayName,
       color,
       cursor: null,
     });
+    provider.connect();
 
     setValue({
       ydoc,

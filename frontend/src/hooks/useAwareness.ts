@@ -29,9 +29,11 @@ export function useAwareness(): {
   const selfId = awareness.clientID;
 
   // Safely build a RemoteUser from raw awareness state.
-  // Remote states can be null (disconnecting) or missing fields.
+  // Remote states can be null (disconnecting), missing fields, or empty
+  // objects (e.g. a relay/ghost entry) — all of those are filtered out.
   function toRemoteUser(clientId: number, raw: any): RemoteUser | null {
     if (!raw || typeof raw !== 'object') return null;
+    if (Object.keys(raw).length === 0) return null;
     return {
       clientId,
       name: typeof raw.name === 'string' ? raw.name : 'Unknown',

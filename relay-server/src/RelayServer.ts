@@ -72,9 +72,13 @@ export class RelayServer {
             (added || []).forEach((id: number) => ids!.add(id));
             (removed || []).forEach((id: number) => ids!.delete(id));
           }
-          console.log(
-            `[Relay] awareness ${roomName}: +${(added || []).length} ~${(updated || []).length} -${(removed || []).length} from ${origin instanceof WebSocket ? 'ws' : 'internal'}`
-          );
+          // Cursor movements update awareness on every mousemove; only log
+          // meaningful changes (a user joining/leaving) to avoid log spam.
+          if ((added || []).length > 0 || (removed || []).length > 0) {
+            console.log(
+              `[Relay] awareness ${roomName}: +${(added || []).length} -${(removed || []).length} (${relayDoc!.clients.size} clients)`
+            );
+          }
           const changedClients = ([] as number[]).concat(added, updated, removed);
           const enc = encoding.createEncoder();
           encoding.writeVarUint(enc, messageAwareness);

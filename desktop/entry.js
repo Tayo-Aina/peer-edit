@@ -61,7 +61,6 @@ const MIME = {
 
 let windows = [];
 let httpServer = null;
-let promptOpen = false;
 let secondLaunchInProgress = false;
 let windowCounter = 1; // the first window (created directly by main) counts as #1
 
@@ -81,6 +80,22 @@ function startStaticServer(dir, startPort) {
         return;
       }
       dbg(`http ${req.method} ${req.url} -> ${urlPath}`);
+
+      // Control/debug endpoints are local-only: the second-instance handoff
+      // and diagnostics must never be reachable from LAN peers.
+      if (urlPath.startsWith('/__peeredit/')) {
+        const remote = (req.socket && req.socket.remoteAddress) || '';
+        const loopback =
+          remote === '127.0.0.1' ||
+          remote === '::1' ||
+          remote === '::ffff:127.0.0.1' ||
+          remote === 'localhost';
+        if (!loopback) {
+          res.writeHead(403, { 'Content-Type': 'text/plain' });
+          res.end('Forbidden');
+          return;
+        }
+      }
 
       // Control endpoints used to detect/hand off between instances.
       if (urlPath === '/__peeredit/ping') {
@@ -329,7 +344,6 @@ async function handleSecondLaunch() {
     }
   } finally {
     secondLaunchInProgress = false;
-    promptOpen = false;
   }
 }
 

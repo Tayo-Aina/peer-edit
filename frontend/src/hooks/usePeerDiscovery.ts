@@ -73,7 +73,17 @@ export function usePeerDiscovery() {
     // Strategy 3: Always include localhost
     found.push({ address: 'localhost', port: RELAY_PORT, label: `localhost:${RELAY_PORT}` });
 
-    setPeers(found);
+    // Deduplicate by address:port (a saved relay can be identical to localhost
+    // or a scanned host). Keep the first occurrence (prefer the "(saved)" label).
+    const seen = new Set<string>();
+    const unique = found.filter((peer) => {
+      const key = `${peer.address}:${peer.port}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    setPeers(unique);
     setScanning(false);
   }, []);
 

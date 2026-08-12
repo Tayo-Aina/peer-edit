@@ -71,7 +71,7 @@ let windowCounter = 1; // the first window (created directly by main) counts as 
 
 function startStaticServer(dir, startPort) {
   return new Promise((resolve, reject) => {
-    const server = http.createServer((req, res) => {
+    const server = http.createServer(async (req, res) => {
       let urlPath;
       try {
         urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
@@ -92,6 +92,61 @@ function startStaticServer(dir, startPort) {
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end('queued');
         handleSecondLaunch(); // async; do not block the response
+        return;
+      }
+      if (urlPath === '/__peeredit/windows') {
+        // Diagnostics: list open windows + their current URLs/titles.
+        const list = windows.map((w) => ({
+          url: w.webContents ? w.webContents.getURL() : null,
+          title: w.webContents ? w.webContents.getTitle() : null,
+        }));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(list));
+        return;
+      }
+      if (urlPath === '/__peeredit/dom') {
+        // Diagnostics: dump the live DOM of every window (find stray content).
+        const dump = await Promise.all(
+          windows.map(async (w) => {
+            try {
+              const info = await w.webContents.executeJavaScript(`({
+                url: window.location.href,
+                pmPlaceholder: (function () { var el = document.querySelector('.ProseMirror'); return el ? el.getAttribute('data-placeholder') : 'no-el'; })(),
+                pmBefore: (function () { var el = document.querySelector('.ProseMirror'); return el ? getComputedStyle(el, '::before').content.slice(0, 200) : 'no-el'; })(),
+                allPseudo: Array.from(document.querySelectorAll('*')).filter(function (e) { return getComputedStyle(e, '::before').content !== 'none' || getComputedStyle(e, '::after').content !== 'none'; }).map(function (e) { return e.tagName + '.' + (e.className || '') + '|b=' + getComputedStyle(e, '::before').content.slice(0, 60) + '|a=' + getComputedStyle(e, '::after').content.slice(0, 60); }),
+                tiptapStyleParent: (function () { var s = document.querySelector('style[data-tiptap-style]'); return s ? s.parentElement.tagName : 'no-style'; })(),
+                tiptapStyleRect: (function () { var s = document.querySelector('style[data-tiptap-style]'); if (!s) return null; var r = s.getBoundingClientRect(); return { top: Math.round(r.top), height: Math.round(r.height) }; })(),
+                cssInBodyCorrect: document.body.innerHTML.indexOf('.ProseMirror {\\n  position: relative'),
+                bodyStart: document.body.innerHTML.slice(0, 200)
+              })`);
+              return info;
+            } catch (e) {
+              return { error: String(e) };
+            }
+          })
+        );
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(dump));
+        return;
+      }
+      if (urlPath === '/__peeredit/shot') {
+        // Diagnostics: screenshot the last window (index 1) and save it.
+        const w = windows[windows.length - 1];
+        if (!w) {
+          res.writeHead(404, { 'Content-Type': 'text/plain' });
+          res.end('no windows');
+          return;
+        }
+        try {
+          const img = await w.capturePage();
+          const p = path.join(require('os').tmpdir(), `peeredit-shot-${Date.now()}.png`);
+          fs.writeFileSync(p, img.toPNG());
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end(p);
+        } catch (e) {
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end(String(e));
+        }
         return;
       }
 
@@ -196,15 +251,12 @@ function createWindow(instanceLabel) {
       try {
         const info = await win.webContents.executeJavaScript(`({
           url: window.location.href,
-          readyState: document.readyState,
           title: document.title,
-          rootChildren: (document.getElementById('root') ? document.getElementById('root').childElementCount : -1),
-          rootText: (document.getElementById('root') ? document.getElementById('root').innerText.slice(0, 300) : ''),
-          bodyHtmlHead: document.body.innerHTML.slice(0, 600),
-          cssInDom: document.documentElement.outerHTML.includes('.ProseMirror { position: relative'),
-          styleTags: document.querySelectorAll('style').length,
-          hasEditor: !!document.querySelector('.ProseMirror'),
-          editorText: (document.querySelector('.ProseMirror') ? document.querySelector('.ProseMirror').innerText.slice(0, 200) : '')
+          bodyChildren: Array.from(document.body.children).map(function (c) { return c.tagName.toLowerCase() + '#' + (c.id || '') + '.' + (String(c.className || '')) + ' text=' + JSON.stringify((c.innerText || '').slice(0, 80)); }),
+          styles: Array.from(document.querySelectorAll('style')).map(function (s) { return { len: s.textContent.length, head: s.textContent.slice(0, 80), inHead: s.parentElement === document.head }; }),
+          cssIndexInBody: document.body.innerHTML.indexOf('.ProseMirror { position: relative'),
+          editorContent: (document.querySelector('.ProseMirror') ? document.querySelector('.ProseMirror').innerHTML.slice(0, 300) : ''),
+          hasEditor: !!document.querySelector('.ProseMirror')
         })`);
         dbg(`[renderer${instanceLabel ? ' ' + instanceLabel : ''}] page-state(${tag}) ${JSON.stringify(info)}`);
       } catch (e) {
@@ -212,6 +264,20 @@ function createWindow(instanceLabel) {
       }
     };
     await snapshot('load');
+    if (DEBUG_LOG) {
+      const shot = async (tag) => {
+        try {
+          const img = await win.capturePage();
+          const p = `${DEBUG_LOG}.${instanceLabel || '1'}.${tag}.png`;
+          fs.writeFileSync(p, img.toPNG());
+          dbg(`[renderer${instanceLabel ? ' ' + instanceLabel : ''}] screenshot saved ${p}`);
+        } catch (e) {
+          dbg(`screenshot error ${String(e)}`);
+        }
+      };
+      setTimeout(() => shot('8s'), 8000);
+      setTimeout(() => shot('20s'), 20000);
+    }
     setTimeout(() => snapshot('6s'), 6000);
     setTimeout(() => snapshot('15s'), 15000);
   });

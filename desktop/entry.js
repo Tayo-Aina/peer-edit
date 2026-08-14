@@ -10,12 +10,18 @@
 // a second launch is detected, the running instance is asked to show a prompt
 // ("open another window?") and the second process quits immediately.
 
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const { startRelay, stopRelay, isPortFree } = require('./bundle/relay.cjs');
+const {
+  startRelay,
+  stopRelay,
+  isPortFree,
+  startDiscovery,
+  getLocalAddresses,
+} = require('./bundle/relay.cjs');
 
 // A text editor doesn't need GPU acceleration, and disabling it avoids
 // renderer crashes on machines/VMs with flaky GPU drivers.
@@ -24,6 +30,7 @@ app.disableHardwareAcceleration();
 const WS_PORT = parseInt(process.env.PEEREDIT_PORT || '9876', 10);
 const HTTP_START_PORT = parseInt(process.env.PEEREDIT_HTTP_PORT || '5173', 10);
 const DIST_DIR = path.join(__dirname, 'bundle', 'frontend-dist');
+const PRELOAD = path.join(__dirname, 'preload.js');
 // Test hooks: auto-open a new window instead of showing the prompt, and
 // auto-connect the first window (simulates clicking "Connect").
 const AUTO_SECOND = process.env.PEEREDIT_AUTO_SECOND === '1';
@@ -63,6 +70,33 @@ let windows = [];
 let httpServer = null;
 let secondLaunchInProgress = false;
 let windowCounter = 1; // the first window (created directly by main) counts as #1
+
+// ---------------------------------------------------------------------------
+// LAN peer discovery (mDNS) — snapshot + live events pushed to renderers
+// ---------------------------------------------------------------------------
+
+const knownPeers = new Map(); // "address:port" -> { address, port, name }
+
+function peerKey(peer) {
+  return `${peer.address}:${peer.port}`;
+}
+
+function broadcastPeer(type, peer) {
+  if (type === 'up') knownPeers.set(peerKey(peer), peer);
+  else knownPeers.delete(peerKey(peer));
+
+  const channel = `peeredit:peer-${type}`;
+  for (const w of windows) {
+    if (w.webContents && !w.webContents.isDestroyed()) {
+      w.webContents.send(channel, peer);
+    }
+  }
+}
+
+// Renderer-facing discovery API (safe — the bridge in preload.js is the only
+// consumer, and it never exposes Node/IPC directly to page scripts).
+ipcMain.handle('peeredit:discover:list', () => Array.from(knownPeers.values()));
+ipcMain.handle('peeredit:local-addresses', () => getLocalAddresses());
 
 // ---------------------------------------------------------------------------
 // HTTP: static frontend + tiny control endpoints
@@ -236,6 +270,7 @@ function createWindow(instanceLabel) {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: PRELOAD,
       // NOTE: sandbox:false — with this portable app running from a temp
       // extraction dir, the Windows AppContainer sandbox fails to spawn a
       // SECOND renderer (render-process-gone "launch-failed", exit 65),
@@ -432,6 +467,7 @@ async function main() {
     }
 
     startRelay(WS_PORT);
+    startDiscovery(broadcastPeer);
     httpServer = await startStaticServer(DIST_DIR, HTTP_START_PORT);
     const port = httpServer.address().port;
 

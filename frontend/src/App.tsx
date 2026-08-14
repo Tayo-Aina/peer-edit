@@ -3,6 +3,7 @@ import { CollaborationProvider } from './providers/CollaborationProvider';
 import { DiscoveryPanel } from './components/DiscoveryPanel';
 import { EditorView } from './components/EditorView';
 import { UserPresence } from './components/UserPresence';
+import { OptionsMenu } from './components/OptionsMenu';
 import { getFriendlyName } from './utils/names';
 import './styles/editor.css';
 import './styles/panel.css';
@@ -17,6 +18,9 @@ export default function App() {
   const [relayUrl, setRelayUrl] = useState<string | null>(initialRelay);
   const [roomName] = useState('default-doc');
   const [userName] = useState(() => getFriendlyName());
+  // Bumping this remounts DiscoveryPanel so "Search for another network"
+  // always kicks off a fresh mDNS scan instead of showing a stale list.
+  const [discoveryKey, setDiscoveryKey] = useState(0);
 
   useEffect(() => {
     if (instanceLabel) {
@@ -32,9 +36,18 @@ export default function App() {
     setRelayUrl(null);
   }, []);
 
+  const handleFindAnotherNetwork = useCallback(() => {
+    setRelayUrl(null);
+    setDiscoveryKey((k) => k + 1);
+  }, []);
+
   return (
     <div className="app">
-      <DiscoveryPanel onConnect={handleConnect} connected={relayUrl !== null} />
+      <DiscoveryPanel
+        key={discoveryKey}
+        onConnect={handleConnect}
+        connected={relayUrl !== null}
+      />
 
       {relayUrl && (
         <CollaborationProvider relayUrl={relayUrl} roomName={roomName} userName={userName}>
@@ -43,13 +56,11 @@ export default function App() {
             <div className="status-indicator">
               <span className="status-dot connected" />
               <span>{relayUrl.replace('ws://', '')}</span>
-              <button
-                className="btn"
-                onClick={handleDisconnect}
-                style={{ marginLeft: 12 }}
-              >
-                Disconnect
-              </button>
+              <OptionsMenu
+                relayUrl={relayUrl}
+                onDisconnect={handleDisconnect}
+                onFindAnotherNetwork={handleFindAnotherNetwork}
+              />
             </div>
           </header>
           <main>

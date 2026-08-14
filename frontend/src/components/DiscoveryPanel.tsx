@@ -6,8 +6,12 @@ interface DiscoveryPanelProps {
   connected: boolean;
 }
 
+function labelFor(peer: DiscoveredPeer): string {
+  return peer.name ?? `${peer.address}:${peer.port}`;
+}
+
 export function DiscoveryPanel({ onConnect, connected }: DiscoveryPanelProps) {
-  const { peers, scanning, rescan, saveRelay } = usePeerDiscovery();
+  const { peers, scanning, selfAddresses, rescan, saveRelay } = usePeerDiscovery();
   const [manualIp, setManualIp] = useState('');
   const [manualPort, setManualPort] = useState('9876');
 
@@ -36,25 +40,30 @@ export function DiscoveryPanel({ onConnect, connected }: DiscoveryPanelProps) {
         </div>
 
         <section className="discovery-section">
-          <h2>Discovered Relays</h2>
+          <h2>Peers on your network</h2>
           <button className="btn btn-secondary" onClick={rescan} disabled={scanning}>
-            {scanning ? 'Scanning...' : '🔄 Rescan LAN'}
+            {scanning ? 'Scanning…' : '🔄 Refresh'}
           </button>
           {peers.length === 0 && !scanning && (
             <p className="discovery-empty">
-              No relays found. Start a relay server on this network first.
+              No peers found. Make sure other PeerEdit instances are running on this network.
             </p>
           )}
           <ul className="peer-list">
             {peers.map((peer) => (
               <li key={`${peer.address}:${peer.port}`} className="peer-item">
-                <span className="peer-label">{peer.label}</span>
+                <span className="peer-label">{labelFor(peer)}</span>
                 <button className="btn" onClick={() => handlePeerClick(peer)}>
                   Connect
                 </button>
               </li>
             ))}
           </ul>
+          {selfAddresses.length > 0 && (
+            <p className="discovery-self">
+              This device: {selfAddresses.join(', ')} — share an address so others can join you.
+            </p>
+          )}
         </section>
 
         <section className="discovery-section">

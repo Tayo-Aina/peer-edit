@@ -120,6 +120,76 @@ input {
   background-color: var(--border);
 }
 
+/* Header Options Menu (connection dropdown) */
+.header-options {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.options-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  transition: all 0.15s ease;
+}
+
+.options-trigger:hover {
+  background-color: var(--bg-color);
+  color: var(--text-main);
+}
+
+.options-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  min-width: 220px;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.options-menu-header {
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  word-break: break-all;
+}
+
+.options-menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.options-menu-item:hover {
+  background: var(--bg-color);
+}
+
+.options-menu-item + .options-menu-item {
+  border-top: 1px solid var(--border);
+}
+
+.options-menu-item-danger {
+  color: #dc2626;
+}
+
 main {
   flex: 1;
   display: flex;

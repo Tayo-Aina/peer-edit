@@ -25,6 +25,16 @@ interface BonjourService {
 
 type EventHandler = (payload: any) => void;
 
+/** Pick the first usable IPv4 address from a bonjour service (preferred for
+ *  building a `ws://` URL); fall back to any address, then the `.local` host. */
+function pickAddress(service: BonjourService): string {
+  const addrs = service.addresses ?? [];
+  const ipv4 = addrs.find((a) => /^\d{1,3}(\.\d{1,3}){3}$/.test(a));
+  if (ipv4) return ipv4;
+  if (addrs.length > 0) return addrs[0];
+  return service.host ?? 'unknown';
+}
+
 export class Discovery {
   private bonjour: InstanceType<typeof Bonjour>;
   private service: any = null;
@@ -53,7 +63,7 @@ export class Discovery {
     this.browser = this.bonjour.find({ type: SERVICE_TYPE, protocol: PROTOCOL });
     this.browser.on('up', (service: BonjourService) => {
       const peer: DiscoveredPeer = {
-        address: service.addresses?.[0] ?? service.host ?? 'unknown',
+        address: pickAddress(service),
         port: service.port,
         name: service.name,
       };
@@ -61,7 +71,7 @@ export class Discovery {
     });
     this.browser.on('down', (service: BonjourService) => {
       const peer: DiscoveredPeer = {
-        address: service.addresses?.[0] ?? service.host ?? 'unknown',
+        address: pickAddress(service),
         port: service.port,
         name: service.name,
       };

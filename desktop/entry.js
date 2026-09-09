@@ -1,521 +1,189 @@
-// PeerEdit desktop shell (Electron main process)
-//
-// Starts the bundled relay (ws://0.0.0.0:9876), serves the built frontend
-// over HTTP (http://0.0.0.0:5173, auto-increments if busy) and opens the
-// editor in its own window. LAN peers can join via their browser.
-//
-// Second-instance handling: the Electron single-instance lock is unreliable
-// for portable exes, so a second launch is detected with BOTH the lock AND a
-// direct HTTP probe of the running instance's control endpoint. Whichever way
-// a second launch is detected, the running instance is asked to show a prompt
-// ("open another window?") and the second process quits immediately.
-
+// PeerEdit desktop shell: relay + static frontend + editor windows.
+// Second launches are detected via single-instance lock AND HTTP probe;
+// the running instance prompts to open another window, the duplicate quits.
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-
-const {
-  startRelay,
-  stopRelay,
-  isPortFree,
-  startDiscovery,
-  getLocalAddresses,
-} = require('./bundle/relay.cjs');
-
-// A text editor doesn't need GPU acceleration, and disabling it avoids
-// renderer crashes on machines/VMs with flaky GPU drivers.
-app.disableHardwareAcceleration();
-
+const { startRelay, stopRelay, isPortFree, startDiscovery, getLocalAddresses } = require('./bundle/relay.cjs');
+// File-based launch log: a double-clicked windowed exe has NO console, so every
+// startup decision is also appended to %TEMP%\peeredit-launch.log for diagnosis.
+const LAUNCH_LOG = path.join(process.env.TEMP || process.env.TMP || __dirname, 'peeredit-launch.log');
+function plog(msg) {
+  try { console.error(`[peeredit] ${msg}`); } catch {}
+  try {
+    try { if (fs.statSync(LAUNCH_LOG).size > 512 * 1024) fs.writeFileSync(LAUNCH_LOG, ''); } catch {}
+    fs.appendFileSync(LAUNCH_LOG, `[${new Date().toISOString()}] [pid=${process.pid}] ${msg}\n`);
+  } catch {}
+}
+plog(`entry.js loaded pid=${process.pid} (log file: ${LAUNCH_LOG})`);
+app.disableHardwareAcceleration(); // text editor needs no GPU; avoids flaky-driver renderer crashes
 const WS_PORT = parseInt(process.env.PEEREDIT_PORT || '9876', 10);
 const HTTP_START_PORT = parseInt(process.env.PEEREDIT_HTTP_PORT || '5173', 10);
 const DIST_DIR = path.join(__dirname, 'bundle', 'frontend-dist');
 const PRELOAD = path.join(__dirname, 'preload.js');
-// Test hooks: auto-open a new window instead of showing the prompt, and
-// auto-connect the first window (simulates clicking "Connect").
-const AUTO_SECOND = process.env.PEEREDIT_AUTO_SECOND === '1';
-const AUTO_CONNECT = process.env.PEEREDIT_AUTO_CONNECT === '1';
-// Optional debug log file (Electron GUI apps can't be relied on for stdout).
-const DEBUG_LOG = process.env.PEEREDIT_DEBUG_LOG;
-function dbg(...args) {
-  const line = `[${new Date().toISOString().slice(11, 19)}] ${args.join(' ')}`;
-  if (DEBUG_LOG) {
-    try {
-      fs.appendFileSync(DEBUG_LOG, line + '\n');
-    } catch {}
-  }
-  console.log(line);
-}
-
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.ico': 'image/x-icon',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf',
-  '.map': 'application/json',
-  '.txt': 'text/plain; charset=utf-8',
-};
-
-let windows = [];
-let httpServer = null;
-let secondLaunchInProgress = false;
-let windowCounter = 1; // the first window (created directly by main) counts as #1
-
-// ---------------------------------------------------------------------------
-// LAN peer discovery (mDNS) — snapshot + live events pushed to renderers
-// ---------------------------------------------------------------------------
-
-const knownPeers = new Map(); // "address:port" -> { address, port, name }
-
-function peerKey(peer) {
-  return `${peer.address}:${peer.port}`;
-}
-
+const AUTO_SECOND = process.env.PEEREDIT_AUTO_SECOND === '1'; // test hook: skip prompt
+const AUTO_CONNECT = process.env.PEEREDIT_AUTO_CONNECT === '1'; // test hook: auto-connect window 1
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
+let windows = [], httpServer = null, secondLaunchInProgress = false, windowCounter = 1;
+const knownPeers = new Map();
 function broadcastPeer(type, peer) {
-  if (type === 'up') knownPeers.set(peerKey(peer), peer);
-  else knownPeers.delete(peerKey(peer));
-
-  const channel = `peeredit:peer-${type}`;
-  for (const w of windows) {
-    if (w.webContents && !w.webContents.isDestroyed()) {
-      w.webContents.send(channel, peer);
-    }
-  }
+  if (type === 'up') knownPeers.set(`${peer.address}:${peer.port}`, peer);
+  else knownPeers.delete(`${peer.address}:${peer.port}`);
+  for (const w of windows) if (w.webContents && !w.webContents.isDestroyed()) w.webContents.send(`peeredit:peer-${type}`, peer);
 }
-
-// Renderer-facing discovery API (safe — the bridge in preload.js is the only
-// consumer, and it never exposes Node/IPC directly to page scripts).
 ipcMain.handle('peeredit:discover:list', () => Array.from(knownPeers.values()));
 ipcMain.handle('peeredit:local-addresses', () => getLocalAddresses());
-
-// ---------------------------------------------------------------------------
-// HTTP: static frontend + tiny control endpoints
-// ---------------------------------------------------------------------------
-
+function isLoopback(req) {
+  const r = (req.socket && req.socket.remoteAddress) || '';
+  return r === '127.0.0.1' || r === '::1' || r === '::ffff:127.0.0.1' || r === 'localhost';
+}
 function startStaticServer(dir, startPort) {
   return new Promise((resolve, reject) => {
-    const server = http.createServer(async (req, res) => {
+    const server = http.createServer((req, res) => {
       let urlPath;
-      try {
-        urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
-      } catch {
-        res.writeHead(400);
-        res.end('Bad request');
-        return;
-      }
-      dbg(`http ${req.method} ${req.url} -> ${urlPath}`);
-
-      // Control/debug endpoints are local-only: the second-instance handoff
-      // and diagnostics must never be reachable from LAN peers.
-      if (urlPath.startsWith('/__peeredit/')) {
-        const remote = (req.socket && req.socket.remoteAddress) || '';
-        const loopback =
-          remote === '127.0.0.1' ||
-          remote === '::1' ||
-          remote === '::ffff:127.0.0.1' ||
-          remote === 'localhost';
-        if (!loopback) {
-          res.writeHead(403, { 'Content-Type': 'text/plain' });
-          res.end('Forbidden');
-          return;
-        }
-      }
-
-      // Control endpoints used to detect/hand off between instances.
+      try { urlPath = decodeURIComponent((req.url || '/').split('?')[0]); }
+      catch { res.writeHead(400); res.end('Bad request'); return; }
       if (urlPath === '/__peeredit/ping') {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end('ok');
-        return;
+        if (!isLoopback(req)) { res.writeHead(403); res.end('Forbidden'); return; }
+        res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('ok'); return;
       }
       if (urlPath === '/__peeredit/instance-request') {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end('queued');
-        handleSecondLaunch(); // async; do not block the response
-        return;
+        if (!isLoopback(req)) { res.writeHead(403); res.end('Forbidden'); return; }
+        res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('queued');
+        handleSecondLaunch(); return;
       }
-      if (urlPath === '/__peeredit/windows') {
-        // Diagnostics: list open windows + their current URLs/titles.
-        const list = windows.map((w) => ({
-          url: w.webContents ? w.webContents.getURL() : null,
-          title: w.webContents ? w.webContents.getTitle() : null,
-        }));
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(list));
-        return;
-      }
-      if (urlPath === '/__peeredit/dom') {
-        // Diagnostics: dump the live DOM of every window (find stray content).
-        const dump = await Promise.all(
-          windows.map(async (w) => {
-            try {
-              const info = await w.webContents.executeJavaScript(`({
-                url: window.location.href,
-                pmPlaceholder: (function () { var el = document.querySelector('.ProseMirror'); return el ? el.getAttribute('data-placeholder') : 'no-el'; })(),
-                pmBefore: (function () { var el = document.querySelector('.ProseMirror'); return el ? getComputedStyle(el, '::before').content.slice(0, 200) : 'no-el'; })(),
-                allPseudo: Array.from(document.querySelectorAll('*')).filter(function (e) { return getComputedStyle(e, '::before').content !== 'none' || getComputedStyle(e, '::after').content !== 'none'; }).map(function (e) { return e.tagName + '.' + (e.className || '') + '|b=' + getComputedStyle(e, '::before').content.slice(0, 60) + '|a=' + getComputedStyle(e, '::after').content.slice(0, 60); }),
-                tiptapStyleParent: (function () { var s = document.querySelector('style[data-tiptap-style]'); return s ? s.parentElement.tagName : 'no-style'; })(),
-                tiptapStyleRect: (function () { var s = document.querySelector('style[data-tiptap-style]'); if (!s) return null; var r = s.getBoundingClientRect(); return { top: Math.round(r.top), height: Math.round(r.height) }; })(),
-                cssInBodyCorrect: document.body.innerHTML.indexOf('.ProseMirror {\\n  position: relative'),
-                bodyStart: document.body.innerHTML.slice(0, 200)
-              })`);
-              return info;
-            } catch (e) {
-              return { error: String(e) };
-            }
-          })
-        );
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(dump));
-        return;
-      }
-      if (urlPath === '/__peeredit/shot') {
-        // Diagnostics: screenshot the last window (index 1) and save it.
-        const w = windows[windows.length - 1];
-        if (!w) {
-          res.writeHead(404, { 'Content-Type': 'text/plain' });
-          res.end('no windows');
-          return;
-        }
-        try {
-          const img = await w.capturePage();
-          const p = path.join(require('os').tmpdir(), `peeredit-shot-${Date.now()}.png`);
-          fs.writeFileSync(p, img.toPNG());
-          res.writeHead(200, { 'Content-Type': 'text/plain' });
-          res.end(p);
-        } catch (e) {
-          res.writeHead(500, { 'Content-Type': 'text/plain' });
-          res.end(String(e));
-        }
-        return;
-      }
-
       if (urlPath === '/') urlPath = '/index.html';
-
-      const safePath = path
-        .normalize(urlPath)
-        .replace(/^(\.\.[/\\])+/, '')
-        .replace(/^([/\\])/, '');
-      const filePath = path.join(dir, safePath);
-
-      fs.readFile(filePath, (err, data) => {
+      const safe = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, '').replace(/^([/\\])/, '');
+      fs.readFile(path.join(dir, safe), (err, data) => {
         if (!err) {
-          const ext = path.extname(filePath).toLowerCase();
-          res.writeHead(200, {
-            'Content-Type': MIME[ext] || 'application/octet-stream',
-            'Cache-Control': 'no-cache',
-          });
-          res.end(data);
-          return;
+          res.writeHead(200, { 'Content-Type': MIME[path.extname(safe).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+          res.end(data); return;
         }
-        if (!path.extname(urlPath)) {
-          fs.readFile(path.join(dir, 'index.html'), (err2, data2) => {
-            if (err2) {
-              res.writeHead(404);
-              res.end('Not found');
-              return;
-            }
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(data2);
+        if (!path.extname(urlPath)) { // SPA fallback for extensionless routes
+          fs.readFile(path.join(dir, 'index.html'), (e2, d2) => {
+            if (e2) { res.writeHead(404); res.end('Not found'); return; }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(d2);
           });
-        } else {
-          res.writeHead(404);
-          res.end('Not found');
-        }
+        } else { res.writeHead(404); res.end('Not found'); }
       });
     });
-
     server.on('error', (err) => {
-      if (err && err.code === 'EADDRINUSE' && startPort < 65535) {
-        server.close();
-        resolve(startStaticServer(dir, startPort + 1));
-      } else {
-        reject(err);
-      }
+      if (err && err.code === 'EADDRINUSE' && startPort < 65535) { server.close(); resolve(startStaticServer(dir, startPort + 1)); }
+      else reject(err);
     });
-
     server.listen(startPort, '0.0.0.0', () => resolve(server));
   });
 }
-
-// ---------------------------------------------------------------------------
-// Windows
-// ---------------------------------------------------------------------------
-
 function createWindow(instanceLabel) {
   const port = httpServer ? httpServer.address().port : HTTP_START_PORT;
   let url = `http://127.0.0.1:${port}`;
-  if (instanceLabel || AUTO_CONNECT) {
-    const label = instanceLabel || '1';
-    url += `/?instance=${label}&relay=${encodeURIComponent(`ws://127.0.0.1:${WS_PORT}`)}`;
-  }
-
+  if (instanceLabel || AUTO_CONNECT) url += `/?instance=${instanceLabel || '1'}&relay=${encodeURIComponent(`ws://127.0.0.1:${WS_PORT}`)}`;
   const win = new BrowserWindow({
-    width: 1280,
-    height: 820,
-    minWidth: 900,
-    minHeight: 600,
+    width: 1280, height: 820, minWidth: 900, minHeight: 600,
     title: instanceLabel ? `PeerEdit (${instanceLabel})` : 'PeerEdit',
-    autoHideMenuBar: true,
-    backgroundColor: '#0f172a',
+    autoHideMenuBar: true, backgroundColor: '#0f172a',
     webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: PRELOAD,
-      // NOTE: sandbox:false — with this portable app running from a temp
-      // extraction dir, the Windows AppContainer sandbox fails to spawn a
-      // SECOND renderer (render-process-gone "launch-failed", exit 65),
-      // leaving window 2+ as a blank blue screen. The renderer still has no
-      // Node access (contextIsolation + nodeIntegration:false) and only loads
-      // our own local content, so this is safe here.
+      contextIsolation: true, nodeIntegration: false, preload: PRELOAD,
+      // NOTE: sandbox:false — portable exe runs from a temp extraction dir where the
+      // Windows AppContainer sandbox fails to spawn a SECOND renderer (exit 65, blank
+      // blue window 2+). Renderer still has no Node access, loads only local content.
       sandbox: false,
     },
   });
   windows.push(win);
   win.loadURL(url);
-  win.on('closed', () => {
-    windows = windows.filter((w) => w !== win);
-  });
-  // Forward renderer diagnostics (also to the debug log when enabled).
-  win.webContents.on('console-message', (_e, _level, message) => {
-    dbg(`[renderer${instanceLabel ? ' ' + instanceLabel : ''}] ${message}`);
-  });
-  win.webContents.on('did-fail-load', (_e, code, desc, failedUrl) => {
-    dbg(`[renderer${instanceLabel ? ' ' + instanceLabel : ''}] did-fail-load ${code} ${desc} ${failedUrl}`);
-  });
-  win.webContents.on('render-process-gone', (_e, details) => {
-    dbg(`[renderer${instanceLabel ? ' ' + instanceLabel : ''}] render-process-gone ${JSON.stringify(details)}`);
-  });
-  win.webContents.on('did-finish-load', async () => {
-    dbg(`[renderer${instanceLabel ? ' ' + instanceLabel : ''}] did-finish-load`);
-    const snapshot = async (tag) => {
-      try {
-        const info = await win.webContents.executeJavaScript(`({
-          url: window.location.href,
-          title: document.title,
-          bodyChildren: Array.from(document.body.children).map(function (c) { return c.tagName.toLowerCase() + '#' + (c.id || '') + '.' + (String(c.className || '')) + ' text=' + JSON.stringify((c.innerText || '').slice(0, 80)); }),
-          styles: Array.from(document.querySelectorAll('style')).map(function (s) { return { len: s.textContent.length, head: s.textContent.slice(0, 80), inHead: s.parentElement === document.head }; }),
-          cssIndexInBody: document.body.innerHTML.indexOf('.ProseMirror { position: relative'),
-          editorContent: (document.querySelector('.ProseMirror') ? document.querySelector('.ProseMirror').innerHTML.slice(0, 300) : ''),
-          hasEditor: !!document.querySelector('.ProseMirror')
-        })`);
-        dbg(`[renderer${instanceLabel ? ' ' + instanceLabel : ''}] page-state(${tag}) ${JSON.stringify(info)}`);
-      } catch (e) {
-        dbg(`[renderer${instanceLabel ? ' ' + instanceLabel : ''}] page-state(${tag}) error ${String(e)}`);
-      }
-    };
-    await snapshot('load');
-    if (DEBUG_LOG) {
-      const shot = async (tag) => {
-        try {
-          const img = await win.capturePage();
-          const p = `${DEBUG_LOG}.${instanceLabel || '1'}.${tag}.png`;
-          fs.writeFileSync(p, img.toPNG());
-          dbg(`[renderer${instanceLabel ? ' ' + instanceLabel : ''}] screenshot saved ${p}`);
-        } catch (e) {
-          dbg(`screenshot error ${String(e)}`);
-        }
-      };
-      setTimeout(() => shot('8s'), 8000);
-      setTimeout(() => shot('20s'), 20000);
-    }
-    setTimeout(() => snapshot('6s'), 6000);
-    setTimeout(() => snapshot('15s'), 15000);
-  });
-  dbg(`createWindow label=${instanceLabel || '1'} url=${url}`);
+  win.on('closed', () => { windows = windows.filter((w) => w !== win); });
+  win.webContents.on('did-fail-load', (_e, code, desc, u) => plog(`renderer${instanceLabel ? ' ' + instanceLabel : ''} did-fail-load ${code} ${desc} ${u}`));
+  win.webContents.on('render-process-gone', (_e, details) => plog(`renderer${instanceLabel ? ' ' + instanceLabel : ''} GONE: ${JSON.stringify(details)}`));
   return win;
 }
-
-/** Open a new editor window (the first window has no label; later ones get "2", "3", ...). */
-function openWindow() {
-  windowCounter += 1;
-  createWindow(windowCounter > 1 ? String(windowCounter) : null);
-}
-
-// ---------------------------------------------------------------------------
-// Second-instance handling
-// ---------------------------------------------------------------------------
-
-/** Ask the user whether to open another editor window on this machine. */
+function openWindow() { windowCounter += 1; createWindow(windowCounter > 1 ? String(windowCounter) : null); }
 async function handleSecondLaunch() {
-  // A single second launch can arrive through BOTH the 'second-instance'
-  // event and the HTTP control endpoint — only act on the first.
-  if (secondLaunchInProgress) return;
+  if (secondLaunchInProgress) return; // dedupe lock-event + HTTP-probe arrivals
   secondLaunchInProgress = true;
-  dbg('handleSecondLaunch called (auto=' + AUTO_SECOND + ')');
   try {
-    if (AUTO_SECOND) {
-      dbg('auto-second: opening window');
-      openWindow();
-      return;
-    }
-    const parent = windows[0] || null;
-    const { response } = await dialog.showMessageBox(parent, {
-      type: 'question',
-      title: 'PeerEdit',
-      message: 'PeerEdit is already running',
+    if (AUTO_SECOND) { openWindow(); return; }
+    const { response } = await dialog.showMessageBox(windows[0] || null, {
+      type: 'question', title: 'PeerEdit', message: 'PeerEdit is already running',
       detail: 'Open another editor window on this machine? Both windows edit the same document together.',
-      buttons: ['Open another window', 'Cancel'],
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true,
+      buttons: ['Open another window', 'Cancel'], defaultId: 0, cancelId: 1, noLink: true,
     });
-    dbg('prompt response=' + response);
-    if (response === 0) {
-      openWindow();
-    } else if (windows.length) {
-      const w = windows[0];
-      if (w.isMinimized()) w.restore();
-      w.focus();
-    }
-  } finally {
-    secondLaunchInProgress = false;
-  }
+    if (response === 0) openWindow();
+    else if (windows.length) { const w = windows[0]; if (w.isMinimized()) w.restore(); w.focus(); }
+  } finally { secondLaunchInProgress = false; }
 }
-
 async function fetchWithTimeout(url, opts, ms) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try {
-    return await fetch(url, { ...opts, signal: ctrl.signal });
-  } finally {
-    clearTimeout(t);
-  }
+  const c = new AbortController(); const t = setTimeout(() => c.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: c.signal }); } finally { clearTimeout(t); }
 }
-
 async function pingExisting(port) {
   try {
     const res = await fetchWithTimeout(`http://127.0.0.1:${port}/__peeredit/ping`, {}, 800);
-    return res.ok;
-  } catch {
-    return false;
+    if (!res.ok) return false;
+    const body = await res.text();
+    // Identity check: OUR static server answers exactly "ok". Any other server
+    // on ports 5173-5177 (e.g. vite's SPA fallback returns 200 HTML for every
+    // extensionless path) must NOT be mistaken for a running PeerEdit instance.
+    return body === 'ok';
   }
+  catch { return false; }
 }
-
-/** Tell the running instance (on `port`) to open another window. */
-async function requestNewInstance(port) {
-  try {
-    await fetchWithTimeout(
-      `http://127.0.0.1:${port}/__peeredit/instance-request`,
-      { method: 'POST' },
-      1500
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Probe the default HTTP port (and its fallbacks) for a running instance. */
 async function signalExistingInstance() {
   for (let p = HTTP_START_PORT; p < HTTP_START_PORT + 5; p++) {
-    if (await pingExisting(p)) {
-      await requestNewInstance(p);
+    const ok = await pingExisting(p);
+    plog(`ping :${p} existing-instance=${ok}`);
+    if (ok) {
+      try { await fetchWithTimeout(`http://127.0.0.1:${p}/__peeredit/instance-request`, { method: 'POST' }, 1500); } catch {}
       return true;
     }
   }
   return false;
 }
-
-/** Keep trying for a few seconds (handles the race where the other instance is still starting). */
-async function waitForAndSignalInstance() {
-  for (let i = 0; i < 10; i++) {
-    if (await signalExistingInstance()) return true;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  return false;
-}
-
-// ---------------------------------------------------------------------------
-// Startup
-// ---------------------------------------------------------------------------
-
 async function main() {
-  dbg('main() starting');
+  plog('main() entered');
   try {
-    // Another instance's UI may already be reachable (e.g. we lost the lock race).
-    if (await signalExistingInstance()) {
-      dbg('another instance reachable — quitting');
-      app.quit();
-      return;
+    if (await signalExistingInstance()) { plog('quitting: existing instance signaled'); app.quit(); return; }
+    if (!(await isPortFree(WS_PORT))) {
+      plog(`relay port ${WS_PORT} busy`);
+      if (!(await signalExistingInstance())) dialog.showErrorBox('PeerEdit', `Port ${WS_PORT} is already in use.\n\nClose the program using port ${WS_PORT} and try again.`);
+      app.quit(); return;
     }
-
-    const free = await isPortFree(WS_PORT);
-    dbg('isPortFree(' + WS_PORT + ')=' + free);
-    if (!free) {
-      // Port busy: either another PeerEdit is coming up (hand over to it) or an
-      // unrelated program holds the port (show an error).
-      const signaled = await waitForAndSignalInstance();
-      dbg('port busy; signaled other instance=' + signaled);
-      if (!signaled) {
-        dialog.showErrorBox(
-          'PeerEdit',
-          `Port ${WS_PORT} is already in use.\n\nClose the program using port ${WS_PORT} and try again.`
-        );
-      }
-      app.quit();
-      return;
-    }
-
-    startRelay(WS_PORT);
-    startDiscovery(broadcastPeer);
+    startRelay(WS_PORT); startDiscovery(broadcastPeer);
+    plog(`relay started on :${WS_PORT}`);
     httpServer = await startStaticServer(DIST_DIR, HTTP_START_PORT);
-    const port = httpServer.address().port;
-
-    dbg(`Relay: ws://0.0.0.0:${WS_PORT}; UI: http://0.0.0.0:${port}`);
-
+    plog(`static server on :${httpServer.address().port}`);
     createWindow(null);
-  } catch (err) {
-    dbg('main() error: ' + String((err && err.message) || err));
-    dialog.showErrorBox('PeerEdit failed to start', String((err && err.message) || err));
-    app.quit();
+    plog('window created');
+  } catch (err) { plog(`FATAL: ${err && err.stack ? err.stack : err}`); dialog.showErrorBox('PeerEdit failed to start', String((err && err.message) || err)); app.quit(); }
+}
+(async () => {
+  // Lock acquisition with brief retries: a previous instance that is still shutting
+  // down can transiently hold the lock, which used to mean instant silent death on a
+  // rapid double-launch. A hard failure shows up as process_singleton_win Error 5.
+  let gotLock = app.requestSingleInstanceLock();
+  plog(`single-instance lock: ${gotLock}`);
+  for (let attempt = 2; !gotLock && attempt <= 3; attempt++) {
+    await new Promise((r) => setTimeout(r, 700));
+    gotLock = app.requestSingleInstanceLock();
+    plog(`single-instance lock (retry ${attempt}): ${gotLock}`);
   }
-}
-
-const gotLock = app.requestSingleInstanceLock();
-dbg('single instance lock=' + gotLock);
-if (!gotLock) {
-  // Electron says another instance exists — hand off to it and quit.
-  signalExistingInstance().catch(() => {});
-  app.quit();
-} else {
-  app.on('second-instance', () => {
-    dbg('second-instance event');
-    handleSecondLaunch();
-  });
-
-  app.on('child-process-gone', (_e, details) => {
-    dbg(`child-process-gone ${JSON.stringify(details)}`);
-  });
-
-  app.on('window-all-closed', () => {
+  if (!gotLock) {
+    // Distinguish "another instance holds the lock" from "we cannot create the
+    // lockfile at all" (Chromium reports the latter as Error code 5).
+    try { fs.accessSync(app.getPath('userData'), fs.constants.W_OK); plog(`userData dir ${app.getPath('userData')} IS writable (lockfile likely held by another instance) or antivirus blocked it`); }
+    catch (e) { plog(`userData dir ${app.getPath('userData')} NOT writable: ${(e && e.code) || e}`); }
+    plog('quitting: lock not acquired (another instance running?)');
+    signalExistingInstance().catch(() => {});
     app.quit();
-  });
-
+    return;
+  }
+  app.on('second-instance', () => handleSecondLaunch());
+  app.on('window-all-closed', () => app.quit());
   app.on('before-quit', () => {
-    try {
-      stopRelay();
-    } catch {}
-    if (httpServer) {
-      try {
-        httpServer.close();
-      } catch {}
-      if (httpServer.closeAllConnections) {
-        try {
-          httpServer.closeAllConnections();
-        } catch {}
-      }
-    }
+    plog('before-quit');
+    try { stopRelay(); } catch {}
+    if (httpServer) { try { httpServer.close(); } catch {} try { httpServer.closeAllConnections?.(); } catch {} }
   });
-
-  app.whenReady().then(main);
-}
+  app.whenReady().then(() => { plog('app ready'); return main(); });
+})();

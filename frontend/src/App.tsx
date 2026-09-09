@@ -5,8 +5,12 @@ import { EditorView } from './components/EditorView';
 import { UserPresence } from './components/UserPresence';
 import { OptionsMenu } from './components/OptionsMenu';
 import { getFriendlyName } from './utils/names';
+import { initTheme } from './hooks/useTheme';
 import './styles/editor.css';
 import './styles/panel.css';
+
+// Apply the persisted theme before the first paint to avoid a light-mode flash.
+initTheme();
 
 export default function App() {
   // The desktop shell appends ?instance=N&relay=ws://... for additional windows
@@ -53,7 +57,7 @@ export default function App() {
         <CollaborationProvider relayUrl={relayUrl} roomName={roomName} userName={userName}>
           <header className="app-header">
             <h1>PeerEdit</h1>
-            <div className="status-indicator">
+            <div className="status-indicator" aria-live="polite">
               <span className="status-dot connected" />
               <span>{relayUrl.replace('ws://', '')}</span>
               <OptionsMenu
@@ -63,7 +67,7 @@ export default function App() {
               />
             </div>
           </header>
-          <main>
+          <main className="workspace">
             <EditorView />
             <UserPresence />
           </main>

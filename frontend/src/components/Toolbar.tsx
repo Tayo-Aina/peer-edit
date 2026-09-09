@@ -1,14 +1,24 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { Editor } from '@tiptap/react';
 import {
-  Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, Highlighter,
+  Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code,
   Undo, Redo,
-  Heading1, Heading2, Heading3,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, CheckSquare,
-  Quote, SquareTerminal, Link as LinkIcon,
+  Quote, SquareTerminal,
+  Subscript, Superscript, RemoveFormatting,
+  ImagePlus, Minus, Search,
   Download,
 } from 'lucide-react';
+import { BlockTypeSelect } from './toolbar/BlockTypeSelect';
+import { FontFamilySelect } from './toolbar/FontFamilySelect';
+import { FontSizeSelect } from './toolbar/FontSizeSelect';
+import { ColorPopover } from './toolbar/ColorPopover';
+import { TableMenu } from './toolbar/TableMenu';
+import { LinkPopover } from './toolbar/LinkPopover';
+import { fileToDataUrl } from '../utils/images';
+import { useEditorUpdate } from '../hooks/useEditorUpdate';
+import '../styles/toolbar.css';
 
 interface ToolbarProps {
   editor: Editor | null;
@@ -34,49 +44,67 @@ function downloadBlob(content: string, filename: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
-export function Toolbar({ editor }: ToolbarProps) {
-  const [exportOpen, setExportOpen] = useState(false);
-  const exportRef = useRef<HTMLDivElement>(null);
-
-  // Close export dropdown on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
-        setExportOpen(false);
-      }
-    }
-    if (exportOpen) {
-      document.addEventListener('mousedown', handleClick);
-    }
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [exportOpen]);
-
-  if (!editor) return null;
-
-  const Button = ({ onClick, active, disabled, icon, title }: ToolbarButtonProps) => (
+/**
+ * Hoisted + memoized so toolbar buttons never remount on every editor
+ * transaction. onMouseDown preventDefault keeps ProseMirror selection intact;
+ * the actual command stays on onClick with chain().focus().
+ */
+const ToolbarButton = React.memo(function ToolbarButton({
+  onClick,
+  active,
+  disabled,
+  icon,
+  title,
+}: ToolbarButtonProps) {
+  return (
     <button
       type="button"
+      onMouseDown={e => {
+        if ((e.target as HTMLElement).closest('input,textarea')) return;
+        e.preventDefault();
+      }}
       onClick={onClick}
       disabled={disabled}
       className={`toolbar-btn ${active ? 'active' : ''}`}
       title={title}
+      aria-label={title}
     >
       {icon}
     </button>
   );
+});
 
-  const setLink = useCallback(() => {
-    const previousUrl = editor.getAttributes('link').href;
-    const url = window.prompt('URL', previousUrl);
-    if (url === null) return;
-    if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run();
-      return;
+export function Toolbar({ editor }: ToolbarProps) {
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // Live active-states: re-render on every transaction / selection change.
+  useEditorUpdate(editor);
+
+  // Close export dropdown on outside click + Escape.
+  useEffect(() => {
+    if (!exportOpen) return;
+    function handleDown(e: MouseEvent | TouchEvent) {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
     }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
-  }, [editor]);
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setExportOpen(false);
+    }
+    document.addEventListener('mousedown', handleDown);
+    document.addEventListener('touchstart', handleDown);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleDown);
+      document.removeEventListener('touchstart', handleDown);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [exportOpen]);
 
   const handleExportHTML = useCallback(() => {
+    if (!editor) return;
     const html = editor.getHTML();
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     downloadBlob(
@@ -88,14 +116,29 @@ export function Toolbar({ editor }: ToolbarProps) {
   }, [editor]);
 
   const handleExportTXT = useCallback(() => {
+    if (!editor) return;
     const text = editor.getText();
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     downloadBlob(text, `peeredit-${ts}.txt`, 'text/plain');
     setExportOpen(false);
   }, [editor]);
 
+  const handleImagePick = useCallback(() => {
+    const file = imageInputRef.current?.files?.[0];
+    if (!file || !editor) return;
+    fileToDataUrl(file).then(src => {
+      if (src) editor.chain().focus().setImage({ src }).run();
+    });
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  }, [editor]);
+
+  if (!editor) return null;
+
+  const Button = ToolbarButton;
+
   return (
-    <div className="toolbar">
+    <div className="toolbar" role="toolbar" aria-label="Formatting toolbar">
+      {/* 1. History */}
       <div className="toolbar-group">
         <Button
           onClick={() => editor.chain().focus().undo().run()}
@@ -113,6 +156,7 @@ export function Toolbar({ editor }: ToolbarProps) {
 
       <div className="toolbar-divider" />
 
+      {/* 2. Marks + link */}
       <div className="toolbar-group">
         <Button
           onClick={() => editor.chain().focus().toggleBold().run()}
@@ -144,45 +188,46 @@ export function Toolbar({ editor }: ToolbarProps) {
           icon={<Code size={16} />}
           title="Code"
         />
-        <Button
-          onClick={() => editor.chain().focus().toggleHighlight().run()}
-          active={editor.isActive('highlight')}
-          icon={<Highlighter size={16} />}
-          title="Highlight"
-        />
-        <Button
-          onClick={setLink}
-          active={editor.isActive('link')}
-          icon={<LinkIcon size={16} />}
-          title="Link"
-        />
+        <LinkPopover editor={editor} />
       </div>
 
       <div className="toolbar-divider" />
 
+      {/* 3. Block + fonts */}
       <div className="toolbar-group">
+        <BlockTypeSelect editor={editor} />
+        <FontFamilySelect editor={editor} />
+        <FontSizeSelect editor={editor} />
+      </div>
+
+      <div className="toolbar-divider" />
+
+      {/* 4. Colors + sub/superscript + clear */}
+      <div className="toolbar-group">
+        <ColorPopover editor={editor} mode="text" />
+        <ColorPopover editor={editor} mode="highlight" />
         <Button
-          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-          active={editor.isActive('heading', { level: 1 })}
-          icon={<Heading1 size={16} />}
-          title="Heading 1"
+          onClick={() => editor.chain().focus().toggleSubscript().run()}
+          active={editor.isActive('subscript')}
+          icon={<Subscript size={16} />}
+          title="Subscript"
         />
         <Button
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          active={editor.isActive('heading', { level: 2 })}
-          icon={<Heading2 size={16} />}
-          title="Heading 2"
+          onClick={() => editor.chain().focus().toggleSuperscript().run()}
+          active={editor.isActive('superscript')}
+          icon={<Superscript size={16} />}
+          title="Superscript"
         />
         <Button
-          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-          active={editor.isActive('heading', { level: 3 })}
-          icon={<Heading3 size={16} />}
-          title="Heading 3"
+          onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}
+          icon={<RemoveFormatting size={16} />}
+          title="Clear formatting"
         />
       </div>
 
       <div className="toolbar-divider" />
 
+      {/* 5. Align + lists + table + media */}
       <div className="toolbar-group">
         <Button
           onClick={() => editor.chain().focus().setTextAlign('left').run()}
@@ -208,11 +253,6 @@ export function Toolbar({ editor }: ToolbarProps) {
           icon={<AlignJustify size={16} />}
           title="Justify"
         />
-      </div>
-
-      <div className="toolbar-divider" />
-
-      <div className="toolbar-group">
         <Button
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           active={editor.isActive('bulletList')}
@@ -231,11 +271,6 @@ export function Toolbar({ editor }: ToolbarProps) {
           icon={<CheckSquare size={16} />}
           title="Task List"
         />
-      </div>
-
-      <div className="toolbar-divider" />
-
-      <div className="toolbar-group">
         <Button
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
           active={editor.isActive('blockquote')}
@@ -248,23 +283,51 @@ export function Toolbar({ editor }: ToolbarProps) {
           icon={<SquareTerminal size={16} />}
           title="Code Block"
         />
+        <TableMenu editor={editor} />
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          className="visually-hidden"
+          aria-label="Insert image"
+          onChange={handleImagePick}
+        />
+        <Button
+          onClick={() => imageInputRef.current?.click()}
+          icon={<ImagePlus size={16} />}
+          title="Insert image"
+        />
+        <Button
+          onClick={() => editor.chain().focus().setHorizontalRule().run()}
+          icon={<Minus size={16} />}
+          title="Horizontal rule"
+        />
+        <Button
+          onClick={() => window.dispatchEvent(new CustomEvent('peeredit:toggle-find'))}
+          icon={<Search size={16} />}
+          title="Find & Replace (Ctrl+F)"
+        />
       </div>
 
       {/* Spacer pushes export to the right */}
       <div className="toolbar-spacer" />
 
-      {/* Export dropdown */}
+      {/* 6. Export dropdown */}
       <div className="toolbar-group toolbar-export" ref={exportRef}>
         <button
           type="button"
           className="toolbar-btn"
-          onClick={() => setExportOpen(!exportOpen)}
+          onMouseDown={e => e.preventDefault()}
+          onClick={() => setExportOpen(o => !o)}
           title="Export document"
+          aria-label="Export document"
+          aria-expanded={exportOpen}
+          aria-haspopup="menu"
         >
           <Download size={16} />
         </button>
         {exportOpen && (
-          <div className="export-menu">
+          <div className="export-menu" role="menu">
             <button
               type="button"
               className="export-menu-item"

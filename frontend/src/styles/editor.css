@@ -9,14 +9,15 @@
 
 .toolbar {
   display: flex;
+  /* Wrap (not horizontal scroll): a scroll container would clip the dropdown
+     panels that hang below the bar (overflow-x != visible forces overflow-y
+     to auto), and the Electron default window (1280px) is narrower than the
+     full row anyway. */
   flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
+  gap: 0.5rem 0.375rem;
+  padding: 0.5rem 0.75rem;
   background-color: var(--bg-surface);
   border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 5;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.02);
 }
 
@@ -24,14 +25,16 @@
   display: flex;
   gap: 0.25rem;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .toolbar-divider {
   width: 1px;
   background-color: var(--border);
-  margin: 0 0.25rem;
+  margin: 0 0.125rem;
   height: 1.5rem;
   align-self: center;
+  flex-shrink: 0;
 }
 
 .toolbar-btn {
@@ -51,7 +54,7 @@
 }
 
 .toolbar-btn.active {
-  background-color: #dbeafe; /* Light blue */
+  background-color: var(--toolbar-active-bg);
   color: var(--accent);
 }
 
@@ -60,22 +63,62 @@
   cursor: not-allowed;
 }
 
+/* Text dropdown triggers (block type / font family / font size) must size to
+   their label. The fixed 2rem width above is for icon buttons only — forcing
+   it onto text triggers crushed "Paragraph"/"Font"/"16" into 32px boxes whose
+   labels overflowed and painted over the neighboring buttons. */
+.toolbar-btn.toolbar-dropdown-trigger {
+  width: auto;
+  min-width: 2rem;
+  padding: 0 0.375rem;
+}
+
 .editor-content {
   flex: 1;
   overflow-y: auto;
-  padding: 2rem 0;
+  padding: 2rem 1.5rem;
   display: flex;
   justify-content: center;
+  align-items: stretch;
+  cursor: text;
+  position: relative;
+}
+
+/* TipTap's <EditorContent> renders a classless wrapper div between
+   .editor-content and .ProseMirror. THAT div is the real flex item — without
+   flex:1 it shrink-wraps to content width and the paper stays narrow,
+   leaving most of the visible page as dead (non-editable) space. */
+.editor-content > div {
+  flex: 1;
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  flex-direction: column;
 }
 
 .ProseMirror {
+  flex: 1;
   width: 100%;
   max-width: 800px;
   min-height: 100%;
-  padding: 0 2rem;
+  padding: 2rem;
   outline: none;
   color: var(--text-main);
   line-height: 1.7;
+  cursor: text;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Keyboard focus must always be visible (toolbar buttons + menu items). */
+.toolbar-btn:focus-visible,
+.block-menu-item:focus-visible,
+.export-menu-item:focus-visible,
+.options-menu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* TipTap default elements styling */
@@ -105,7 +148,7 @@
 }
 
 .ProseMirror mark {
-  background-color: #fef08a; /* Soft yellow highlight */
+  background-color: var(--highlight-default);
   padding: 0.125rem 0;
 }
 
@@ -129,7 +172,7 @@
 }
 
 .ProseMirror pre {
-  background-color: #1f2937; /* Slate 800 */
+  background-color: var(--pre-bg);
   color: #f8fafc;
   padding: 1rem;
   border-radius: var(--radius-md);
@@ -145,7 +188,7 @@
   border-radius: 0.25rem;
   font-size: 0.875em;
   font-family: monospace;
-  color: #be185d; /* Pinkish red */
+  color: var(--code-color);
 }
 
 .ProseMirror pre code {
@@ -177,7 +220,7 @@ ul[data-type="taskList"] li > div {
 .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
-  color: #9ca3af;
+  color: var(--text-muted);
   pointer-events: none;
   height: 0;
 }

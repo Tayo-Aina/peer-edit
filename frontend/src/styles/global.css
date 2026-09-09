@@ -1,19 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
 /*
  * The editor injects a <style data-tiptap-style> element at runtime. In a
  * second (or later) window this element can be painted as a visible block of
  * raw CSS text at the top of the page (shifting the editor out of reach).
- * Style/head elements must never render — force-hide them.
+ * Keep this guard narrowly scoped: hiding every <style>/<head> element is
+ * fragile. Long-term, trial `injectCSS:false` (moving ProseMirror base styles
+ * into overlays.css) and verify in two Electron windows before deleting this.
  */
-style,
-head,
-template,
-script {
+style[data-tiptap-style] {
   display: none !important;
 }
 
 :root {
+  color-scheme: light;
   --bg-color: #f9fafb;
   --bg-surface: #ffffff;
   --text-main: #111827;
@@ -21,11 +19,38 @@ script {
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
   --border: #e5e7eb;
+  --toolbar-active-bg: #dbeafe;
+  --hover-bg: rgba(0, 0, 0, 0.05);
+  --highlight-default: #fef08a;
+  --code-color: #be185d;
+  --pre-bg: #1f2937;
+  --find-match-bg: rgba(250, 204, 21, 0.35);
+  --find-match-active-bg: rgba(251, 146, 60, 0.5);
+  --table-selected-overlay: rgba(37, 99, 235, 0.18);
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-color: #111827;
+  --bg-surface: #1f2937;
+  --text-main: #f3f4f6;
+  --text-muted: #9ca3af;
+  --border: #374151;
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --toolbar-active-bg: rgba(59, 130, 246, 0.28);
+  --hover-bg: rgba(255, 255, 255, 0.08);
+  --highlight-default: rgba(250, 204, 21, 0.32);
+  --code-color: #f472b6;
+  --pre-bg: #111827;
+  --find-match-bg: rgba(245, 158, 11, 0.32);
+  --find-match-active-bg: rgba(249, 115, 22, 0.55);
+  --table-selected-overlay: rgba(59, 130, 246, 0.3);
 }
 
 * {
@@ -35,7 +60,7 @@ script {
 }
 
 body {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--bg-color);
   color: var(--text-main);
   line-height: 1.5;
@@ -166,7 +191,9 @@ input {
 }
 
 .options-menu-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   padding: 10px 16px;
   border: none;
@@ -193,5 +220,13 @@ input {
 main {
   flex: 1;
   display: flex;
+  overflow: hidden;
+}
+
+/* Connected editor workspace: shared max-width + gutters for the paper. */
+.workspace {
+  flex: 1;
+  display: flex;
+  min-width: 0;
   overflow: hidden;
 }

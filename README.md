@@ -4,11 +4,29 @@ A collaborative text editor that runs on your local network. No internet needed,
 
 ## What it does
 
-- Rich text editing: bold, italic, underline, strikethrough, headings, bullet and numbered lists, checkboxes, code blocks, quotes, text alignment, highlight, links
+- Rich text editing: bold, italic, underline, strikethrough, headings, bullet and numbered lists, checkboxes, code blocks, quotes, text alignment, highlight, links, font family and size, text color, subscript and superscript, images, tables, horizontal rules
 - Live cursors: you can see where everyone else is typing and who they are
 - Export your doc as HTML or plain text
 - Automatic peer discovery: the app scans the network and shows you who else is running PeerEdit
 - Manual connect: type in an IP and port if discovery is blocked
+
+## New in this version
+
+The editor got a serious upgrade:
+
+- Block-type dropdown (headings, lists, code blocks, quotes) in the toolbar
+- Text color and multicolor highlight swatches
+- Font family and font size controls
+- Subscript and superscript, clear formatting, horizontal rule
+- Paste or drop images straight into the doc (stored inline, works offline)
+- Tables: insert, add/remove rows and columns, toggle header row
+- Bubble menu: select text to format it right where it is
+- `/` slash menu: type `/` on an empty line to insert blocks
+- Find & replace (Ctrl+F) with match-case and replace-all
+- Status bar: word and character count, connection state
+- Dark mode and fullscreen toggles
+
+**Important:** everyone in a session must run this rebuilt version. Documents with images or tables can't round-trip through older builds — the new node types simply don't exist there, so syncing between mixed versions can drop content.
 
 ## How it works
 
@@ -35,6 +53,8 @@ While connected you'll see a gear icon in the top right. It lets you:
 
 - Search for another network (drops the current connection and scans again)
 - Disconnect from the network
+- Toggle dark mode
+- Toggle fullscreen
 
 ## Running from source
 

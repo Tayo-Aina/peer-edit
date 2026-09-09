@@ -1,5 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Settings } from 'lucide-react';
+import { Settings, Moon, SunMedium, Maximize2, Minimize2 } from 'lucide-react';
+import { applyTheme, getTheme } from '../hooks/useTheme';
+import { useFullscreen } from '../hooks/useFullscreen';
 
 interface OptionsMenuProps {
   relayUrl: string;
@@ -10,18 +12,29 @@ interface OptionsMenuProps {
 export function OptionsMenu({ relayUrl, onDisconnect, onFindAnotherNetwork }: OptionsMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const [theme, setTheme] = useState(() => getTheme());
+  const { isFullscreen, toggleFullscreen } = useFullscreen();
 
-  // Close on outside click, matching the Toolbar export menu pattern.
+  // Close on outside click/touch + Escape, matching the Toolbar export menu.
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
+    function handleDown(e: MouseEvent | TouchEvent) {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     }
-    if (open) {
-      document.addEventListener('mousedown', handleClick);
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
     }
-    return () => document.removeEventListener('mousedown', handleClick);
+    if (open) {
+      document.addEventListener('mousedown', handleDown);
+      document.addEventListener('touchstart', handleDown);
+      document.addEventListener('keydown', handleKey);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleDown);
+      document.removeEventListener('touchstart', handleDown);
+      document.removeEventListener('keydown', handleKey);
+    };
   }, [open]);
 
   return (
@@ -39,6 +52,28 @@ export function OptionsMenu({ relayUrl, onDisconnect, onFindAnotherNetwork }: Op
       {open && (
         <div className="options-menu" role="menu">
           <div className="options-menu-header">Connected to {relayUrl.replace('ws://', '')}</div>
+          <button
+            type="button"
+            role="menuitem"
+            className="options-menu-item"
+            onClick={() => {
+              const next = theme === 'dark' ? 'light' : 'dark';
+              applyTheme(next);
+              setTheme(next);
+            }}
+          >
+            {theme === 'dark' ? <SunMedium size={14} /> : <Moon size={14} />}
+            Toggle dark mode
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="options-menu-item"
+            onClick={toggleFullscreen}
+          >
+            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            Toggle fullscreen
+          </button>
           <button
             type="button"
             role="menuitem"

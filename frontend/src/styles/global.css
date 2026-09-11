@@ -10,47 +10,70 @@ style[data-tiptap-style] {
   display: none !important;
 }
 
+/*
+ * Design language: Microsoft Word (Office Fluent).
+ * Light  = white chrome on Office neutral gray canvas, Word blue #185abd,
+ *          classic blue title bar #2b579a, Segoe UI, squarish corners.
+ * Dark   = Office "dark gray" (#1b1a19 canvas / #292827 surfaces).
+ * All components consume ONLY these variables — dark mode is free.
+ */
 :root {
   color-scheme: light;
-  --bg-color: #f9fafb;
-  --bg-surface: #ffffff;
-  --text-main: #111827;
-  --text-muted: #6b7280;
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
-  --border: #e5e7eb;
-  --toolbar-active-bg: #dbeafe;
+  --bg-color: #f3f2f1;            /* app canvas behind the document page */
+  --bg-surface: #ffffff;          /* ribbon, panels, paper */
+  --bg-subtle: #faf9f8;           /* subtle inputs / wells */
+  --text-main: #201f1e;
+  --text-muted: #605e5c;
+  --accent: #185abd;              /* Word blue */
+  --accent-hover: #134d9e;
+  --border: #e1dfdd;
+  --border-strong: #c8c6c4;
+  --titlebar-bg: #2b579a;         /* classic Word title bar */
+  --titlebar-hover: rgba(255, 255, 255, 0.12);
+  --titlebar-text: #ffffff;
+  --toolbar-active-bg: #ddebf7;   /* selected button fill */
   --hover-bg: rgba(0, 0, 0, 0.05);
   --highlight-default: #fef08a;
   --code-color: #be185d;
-  --pre-bg: #1f2937;
+  --pre-bg: #252423;
   --find-match-bg: rgba(250, 204, 21, 0.35);
   --find-match-active-bg: rgba(251, 146, 60, 0.5);
-  --table-selected-overlay: rgba(37, 99, 235, 0.18);
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
+  --table-selected-overlay: rgba(24, 90, 189, 0.16);
+  --heading-color: #2f5496;       /* Word default heading blue */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 20px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08);
+  --page-shadow: 0 1.6px 3.6px rgba(0, 0, 0, 0.13), 0 0 1px rgba(0, 0, 0, 0.16);
+  --radius-md: 2px;
+  --radius-lg: 4px;
+  --font-ui: 'Segoe UI', 'Segoe UI Variable Text', system-ui, -apple-system, sans-serif;
+  --font-doc: Calibri, 'Segoe UI', system-ui, sans-serif;
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
-  --bg-color: #111827;
-  --bg-surface: #1f2937;
-  --text-main: #f3f4f6;
-  --text-muted: #9ca3af;
-  --border: #374151;
-  --accent: #3b82f6;
-  --accent-hover: #60a5fa;
-  --toolbar-active-bg: rgba(59, 130, 246, 0.28);
-  --hover-bg: rgba(255, 255, 255, 0.08);
+  --bg-color: #1b1a19;
+  --bg-surface: #292827;
+  --bg-subtle: #323130;
+  --text-main: #f3f2f1;
+  --text-muted: #a19f9d;
+  --accent: #479ef5;
+  --accent-hover: #6cb2f6;
+  --border: #3b3a39;
+  --border-strong: #484644;
+  --titlebar-bg: #201f1e;
+  --titlebar-hover: rgba(255, 255, 255, 0.10);
+  --titlebar-text: #ffffff;
+  --toolbar-active-bg: rgba(71, 158, 245, 0.18);
+  --hover-bg: rgba(255, 255, 255, 0.07);
   --highlight-default: rgba(250, 204, 21, 0.32);
   --code-color: #f472b6;
-  --pre-bg: #111827;
+  --pre-bg: #1b1a19;
   --find-match-bg: rgba(245, 158, 11, 0.32);
   --find-match-active-bg: rgba(249, 115, 22, 0.55);
-  --table-selected-overlay: rgba(59, 130, 246, 0.3);
+  --table-selected-overlay: rgba(71, 158, 245, 0.28);
+  --heading-color: #6ea3e8;
+  --page-shadow: 0 1.6px 3.6px rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.6);
 }
 
 * {
@@ -60,7 +83,7 @@ style[data-tiptap-style] {
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-ui);
   background-color: var(--bg-color);
   color: var(--text-main);
   line-height: 1.5;
@@ -85,31 +108,33 @@ input {
   overflow: hidden;
 }
 
+/* ---- Title bar (Word-style: solid blue strip with white title) ---- */
 .app-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.75rem 1.5rem;
-  background-color: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
+  padding: 0 0.75rem 0 1rem;
+  height: 38px;
+  flex-shrink: 0;
+  background-color: var(--titlebar-bg);
+  color: var(--titlebar-text);
   z-index: 10;
 }
 
 .app-header h1 {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--text-main);
-  letter-spacing: -0.025em;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--titlebar-text);
+  letter-spacing: 0.02em;
 }
 
 .status-indicator {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-muted);
+  gap: 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .status-dot {
@@ -119,15 +144,15 @@ input {
   background-color: #ef4444;
 }
 .status-dot.connected {
-  background-color: #10b981;
+  background-color: #6ccb5f;
 }
 
 .btn {
-  padding: 0.5rem 1rem;
+  padding: 0.45rem 1rem;
   border-radius: var(--radius-md);
   font-size: 0.875rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
+  font-weight: 600;
+  transition: background 0.15s ease;
 }
 .btn-primary {
   background-color: var(--accent);
@@ -137,12 +162,12 @@ input {
   background-color: var(--accent-hover);
 }
 .btn-secondary {
-  background-color: var(--bg-color);
-  border: 1px solid var(--border);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-strong);
   color: var(--text-main);
 }
 .btn-secondary:hover {
-  background-color: var(--border);
+  background-color: var(--bg-color);
 }
 
 /* Header Options Menu (connection dropdown) */
@@ -159,13 +184,13 @@ input {
   width: 2rem;
   height: 2rem;
   border-radius: var(--radius-md);
-  color: var(--text-muted);
-  transition: all 0.15s ease;
+  color: rgba(255, 255, 255, 0.9);
+  transition: background 0.15s ease;
 }
 
 .options-trigger:hover {
-  background-color: var(--bg-color);
-  color: var(--text-main);
+  background-color: var(--titlebar-hover);
+  color: #ffffff;
 }
 
 .options-menu {
@@ -174,7 +199,7 @@ input {
   right: 0;
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   min-width: 220px;
   z-index: 100;
@@ -214,7 +239,7 @@ input {
 }
 
 .options-menu-item-danger {
-  color: #dc2626;
+  color: #d13438;
 }
 
 main {

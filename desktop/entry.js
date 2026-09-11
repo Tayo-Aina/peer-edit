@@ -26,6 +26,10 @@ const AUTO_SECOND = process.env.PEEREDIT_AUTO_SECOND === '1'; // test hook: skip
 const AUTO_CONNECT = process.env.PEEREDIT_AUTO_CONNECT === '1'; // test hook: auto-connect window 1
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 let windows = [], httpServer = null, secondLaunchInProgress = false, windowCounter = 1;
+// Actual relay port, resolved in main(): starts at WS_PORT and falls back to
+// the next free ports when it is taken. Everything that needs the relay port
+// (window URLs, mDNS advertisement, renderer IPC) reads THIS, never WS_PORT.
+let relayPort = WS_PORT;
 const knownPeers = new Map();
 function broadcastPeer(type, peer) {
   if (type === 'up') knownPeers.set(`${peer.address}:${peer.port}`, peer);
@@ -34,6 +38,10 @@ function broadcastPeer(type, peer) {
 }
 ipcMain.handle('peeredit:discover:list', () => Array.from(knownPeers.values()));
 ipcMain.handle('peeredit:local-addresses', () => getLocalAddresses());
+// Port of THIS machine's embedded relay. May differ from the 9876 default when
+// the preferred port was busy at startup; the renderer uses it to pre-fill the
+// manual-connect form so "connect to my own relay" always works.
+ipcMain.handle('peeredit:relay-port', () => relayPort);
 function isLoopback(req) {
   const r = (req.socket && req.socket.remoteAddress) || '';
   return r === '127.0.0.1' || r === '::1' || r === '::ffff:127.0.0.1' || r === 'localhost';
@@ -78,7 +86,7 @@ function startStaticServer(dir, startPort) {
 function createWindow(instanceLabel) {
   const port = httpServer ? httpServer.address().port : HTTP_START_PORT;
   let url = `http://127.0.0.1:${port}`;
-  if (instanceLabel || AUTO_CONNECT) url += `/?instance=${instanceLabel || '1'}&relay=${encodeURIComponent(`ws://127.0.0.1:${WS_PORT}`)}`;
+  if (instanceLabel || AUTO_CONNECT) url += `/?instance=${instanceLabel || '1'}&relay=${encodeURIComponent(`ws://127.0.0.1:${relayPort}`)}`;
   const win = new BrowserWindow({
     width: 1280, height: 820, minWidth: 900, minHeight: 600,
     title: instanceLabel ? `PeerEdit (${instanceLabel})` : 'PeerEdit',
@@ -144,13 +152,26 @@ async function main() {
   plog('main() entered');
   try {
     if (await signalExistingInstance()) { plog('quitting: existing instance signaled'); app.quit(); return; }
-    if (!(await isPortFree(WS_PORT))) {
-      plog(`relay port ${WS_PORT} busy`);
-      if (!(await signalExistingInstance())) dialog.showErrorBox('PeerEdit', `Port ${WS_PORT} is already in use.\n\nClose the program using port ${WS_PORT} and try again.`);
+    // Relay port: prefer WS_PORT (default 9876), then fall back to the next
+    // free ports — same spirit as the static server's EADDRINUSE fallback
+    // below. A shifted port stays fully functional: windows get it via the
+    // ?relay= URL param, the renderer via IPC, and LAN peers learn it from the
+    // mDNS advertisement (Discovery.advertise publishes the real port).
+    const RELAY_PORT_RANGE = 25;
+    let relayFree = null;
+    for (let i = 0; i < RELAY_PORT_RANGE; i++) {
+      const candidate = WS_PORT + i;
+      if (await isPortFree(candidate)) { relayFree = candidate; break; }
+    }
+    if (relayFree === null) {
+      plog(`no free relay port in ${WS_PORT}-${WS_PORT + RELAY_PORT_RANGE - 1}`);
+      if (!(await signalExistingInstance())) dialog.showErrorBox('PeerEdit', `No free relay port in ${WS_PORT}-${WS_PORT + RELAY_PORT_RANGE - 1}.\n\nClose the programs using those ports and try again.`);
       app.quit(); return;
     }
-    startRelay(WS_PORT); startDiscovery(broadcastPeer);
-    plog(`relay started on :${WS_PORT}`);
+    if (relayFree !== WS_PORT) plog(`relay port ${WS_PORT} busy, falling back to ${relayFree}`);
+    relayPort = relayFree;
+    startRelay(relayPort); startDiscovery(broadcastPeer);
+    plog(`relay started on :${relayPort}`);
     httpServer = await startStaticServer(DIST_DIR, HTTP_START_PORT);
     plog(`static server on :${httpServer.address().port}`);
     createWindow(null);

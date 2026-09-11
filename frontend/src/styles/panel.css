@@ -1,8 +1,8 @@
-/* Discovery Panel Overlay - Now a clean full page welcome screen */
+/* Discovery Panel Overlay - Office-style welcome dialog */
 .discovery-overlay {
   position: fixed;
   inset: 0;
-  background-color: var(--bg-surface);
+  background-color: var(--bg-color);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -40,7 +40,7 @@
 }
 
 .discovery-section h2 {
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-main);
   margin-bottom: 1rem;

@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('peeredit', {
   listPeers: () => ipcRenderer.invoke('peeredit:discover:list'),
   // Non-internal IPv4 addresses of this machine (to filter "self" out).
   getLocalAddresses: () => ipcRenderer.invoke('peeredit:local-addresses'),
+  // Port of this machine's embedded relay (may differ from the 9876 default
+  // when the preferred port was busy at startup).
+  getRelayPort: () => ipcRenderer.invoke('peeredit:relay-port'),
   // Subscribe to live discovery events. Each returns an unsubscribe fn.
   onPeerUp: (callback) => {
     const handler = (_event, peer) => callback(peer);

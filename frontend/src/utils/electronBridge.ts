@@ -11,6 +11,7 @@ export interface RawPeer {
 export interface PeerEditBridge {
   listPeers: () => Promise<RawPeer[]>;
   getLocalAddresses: () => Promise<string[]>;
+  getRelayPort: () => Promise<number>;
   onPeerUp: (callback: (peer: RawPeer) => void) => () => void;
   onPeerDown: (callback: (peer: RawPeer) => void) => () => void;
 }

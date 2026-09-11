@@ -23,6 +23,7 @@ import Superscript from '@tiptap/extension-superscript';
 import CharacterCount from '@tiptap/extension-character-count';
 import { Editor } from '@tiptap/core';
 import { FontSize } from '../extensions/FontSize';
+import { Pagination } from '../extensions/Pagination';
 import { SlashCommand } from '../extensions/slash/SlashCommand';
 import { FindReplace } from '../extensions/findReplace/FindReplace';
 import { fileToDataUrl } from '../utils/images';
@@ -86,6 +87,7 @@ export function EditorView() {
       TableHeader,
       TableCell,
       CharacterCount,
+      Pagination,
       SlashCommand,
       FindReplace,
     ],

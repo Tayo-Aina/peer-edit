@@ -3,53 +3,25 @@
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background-color: var(--bg-surface);
+  background-color: var(--bg-color); /* gray canvas behind the page, like Word */
   position: relative;
 }
 
-.toolbar {
-  display: flex;
-  /* Wrap (not horizontal scroll): a scroll container would clip the dropdown
-     panels that hang below the bar (overflow-x != visible forces overflow-y
-     to auto), and the Electron default window (1280px) is narrower than the
-     full row anyway. */
-  flex-wrap: wrap;
-  gap: 0.5rem 0.375rem;
-  padding: 0.5rem 0.75rem;
-  background-color: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.02);
-}
-
-.toolbar-group {
-  display: flex;
-  gap: 0.25rem;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.toolbar-divider {
-  width: 1px;
-  background-color: var(--border);
-  margin: 0 0.125rem;
-  height: 1.5rem;
-  align-self: center;
-  flex-shrink: 0;
-}
-
+/* Buttons live in the ribbon; Word icon buttons are small squares with dark
+   glyphs, light-gray hover fill and a blue active state. */
 .toolbar-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.375rem;
-  color: var(--text-muted);
-  transition: all 0.15s ease;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  transition: background-color 0.1s ease, color 0.1s ease;
 }
 
 .toolbar-btn:hover:not(:disabled) {
-  background-color: var(--bg-color);
+  background-color: var(--hover-bg);
   color: var(--text-main);
 }
 
@@ -64,22 +36,26 @@
 }
 
 /* Text dropdown triggers (block type / font family / font size) must size to
-   their label. The fixed 2rem width above is for icon buttons only — forcing
-   it onto text triggers crushed "Paragraph"/"Font"/"16" into 32px boxes whose
+   their label. The fixed width above is for icon buttons only — forcing it
+   onto text triggers crushed "Paragraph"/"Font"/"16" into tiny boxes whose
    labels overflowed and painted over the neighboring buttons. */
 .toolbar-btn.toolbar-dropdown-trigger {
   width: auto;
-  min-width: 2rem;
-  padding: 0 0.375rem;
+  min-width: 1.75rem;
+  padding: 0 0.5rem;
 }
 
 .editor-content {
   flex: 1;
   overflow-y: auto;
-  padding: 2rem 1.5rem;
+  overflow-x: clip;
+  padding: 1.75rem 2rem;
   display: flex;
   justify-content: center;
-  align-items: stretch;
+  /* flex-start, NOT stretch: stretch clamps the paper's height to the viewport
+     so long docs spill out past the white background onto gray. flex-start
+     lets the paper grow with its content while staying horizontally centered. */
+  align-items: flex-start;
   cursor: text;
   position: relative;
 }
@@ -91,25 +67,26 @@
 .editor-content > div {
   flex: 1;
   width: 100%;
-  max-width: 800px;
+  max-width: 816px; /* US Letter page width @ 96dpi */
   display: flex;
   flex-direction: column;
 }
 
+/* The document "page": square corners, soft page shadow, ~1in margins. */
 .ProseMirror {
   flex: 1;
   width: 100%;
-  max-width: 800px;
+  max-width: 816px;
   min-height: 100%;
-  padding: 2rem;
+  padding: 96px 88px;
   outline: none;
   color: var(--text-main);
-  line-height: 1.7;
+  font-family: var(--font-doc);
+  font-size: 15px; /* ~11pt Calibri */
+  line-height: 1.45;
   cursor: text;
   background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--page-shadow);
 }
 
 /* Keyboard focus must always be visible (toolbar buttons + menu items). */
@@ -122,23 +99,26 @@
 }
 
 /* TipTap default elements styling */
+/* Word document rhythm: modest space between paragraphs. */
 .ProseMirror p {
-  margin-bottom: 1rem;
+  margin-bottom: 0.6rem;
 }
 
+/* Word headings: Calibri Light, NOT bold, muted blue. */
 .ProseMirror h1,
 .ProseMirror h2,
 .ProseMirror h3 {
-  font-weight: 700;
-  line-height: 1.2;
-  margin-top: 1.5rem;
-  margin-bottom: 0.75rem;
-  letter-spacing: -0.02em;
+  font-family: 'Calibri Light', 'Segoe UI', var(--font-doc);
+  font-weight: 400;
+  color: var(--heading-color);
+  line-height: 1.25;
+  margin-top: 1.25rem;
+  margin-bottom: 0.4rem;
 }
 
-.ProseMirror h1 { font-size: 2.25rem; }
-.ProseMirror h2 { font-size: 1.875rem; }
-.ProseMirror h3 { font-size: 1.5rem; }
+.ProseMirror h1 { font-size: 1.75rem; }
+.ProseMirror h2 { font-size: 1.375rem; }
+.ProseMirror h3 { font-size: 1.125rem; }
 
 .ProseMirror a {
   color: var(--accent);
@@ -225,11 +205,7 @@ ul[data-type="taskList"] li > div {
   height: 0;
 }
 
-/* ---- Toolbar Spacer & Export ---- */
-
-.toolbar-spacer {
-  flex: 1;
-}
+/* ---- Export ---- */
 
 .toolbar-export {
   position: relative;
@@ -242,7 +218,7 @@ ul[data-type="taskList"] li > div {
   margin-top: 6px;
   background: var(--bg-surface, #fff);
   border: 1px solid var(--border, #e0e0e0);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   min-width: 180px;
   z-index: 50;
@@ -268,6 +244,92 @@ ul[data-type="taskList"] li > div {
 
 .export-menu-item + .export-menu-item {
   border-top: 1px solid var(--border, #eee);
+}
+
+/* ---- Pagination (Word print-layout page breaks) ---- */
+
+/* The pagination extension measures rendered top-level blocks against one
+   US-Letter usable page height (11in - 2x1in margins = 9in = 864px @ 96dpi)
+   and drops a non-editable gap widget before each block that starts a new
+   page, so the document reads as separate sheets like Word's print layout.
+   The widget lives INSIDE the continuous .ProseMirror sheet, whose own side
+   shadow runs the full document height straight through every break. The
+   trick: the widget overhangs the sheet 10px on each side and paints the
+   FULL break desk-gray, which covers the parent's side shadow across the
+   whole break height and genuinely cuts the sheet's silhouette. Two white
+   blocks inset back to exact sheet width repaint the ending sheet's bottom
+   margin (96px) and the next sheet's top margin (96px). Crucially they carry
+   ONLY horizontal edge shadows (bottom edge of the upper sheet, top edge of
+   the lower sheet) — no side shadows, or they read as inset boxes instead of
+   page ends. Deliberately NO label: Word shows nothing between pages. Page
+   numbers live in the status bar's "Page X of Y" counter. */
+.pm-page-gap {
+  height: 236px;
+  /* Geometry: the widget's containing block is .ProseMirror's CONTENT box
+     (816px sheet minus 2x88px padding = 640px). Block margins do NOT widen
+     an explicitly-sized box, so span the padding + 6px overhang per side
+     with left/width: 640 + 176 + 12 = 828px, offset -94px. The 6px overhang
+     covers the parent sheet's outer side shadow across the break so the
+     silhouette genuinely cuts. */
+  margin: 0;
+  position: relative;
+  left: -94px;
+  width: calc(100% + 188px);
+  /* Full-bleed desk gray for the WHOLE break height: this covers the parent
+     sheet's continuous side shadow so the silhouette genuinely cuts and the
+     upper/lower whites never connect. The whites are repainted as two
+     separate blocks below (page-end / page-start). */
+  background: var(--bg-color);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Page-end: the ending sheet's 96px bottom margin, repainted as its OWN
+   separate white block at exact sheet width (6px gray gutters left/right
+   where the widget overhangs the sheet). The top joint is white-on-white
+   so it must be INVISIBLE: no outline/border/clip layers at all — even a
+   clip-path edge antialiases across the joint and prints as a faint
+   header/footer-style rule. The block overlaps 2px up into the parent
+   white so no hairline seam can show. Bottom edge gets ONE very light
+   soft shadow onto the desk (lighter + smaller than before). The -8px
+   spread already contains side spill, so no clip is needed and no vertical
+   shading steps read as cards. */
+.pm-page-gap::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: -2px;
+  height: 98px;
+  background: var(--bg-surface);
+  border: none;
+  outline: none;
+  box-shadow: 0 6px 10px -8px rgba(0, 0, 0, 0.16);
+  pointer-events: none;
+}
+
+/* Page-start: the next sheet's 96px top margin, own separate white block.
+   Mirror of page-end: overlaps 2px down into the parent white so the
+   bottom joint is seamless white-on-white (no clip edge); ONE very light
+   soft upward shadow onto the desk. */
+.pm-page-gap::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: -2px;
+  height: 98px;
+  background: var(--bg-surface);
+  border: none;
+  outline: none;
+  box-shadow: 0 -6px 10px -8px rgba(0, 0, 0, 0.16);
+  pointer-events: none;
+}
+
+/* Unused: the widget background itself is the desk strip now. Kept as an
+   empty hook so older documents/widgets without it still match. */
+.pm-page-gap-band {
+  display: none;
 }
 
 /* Collaboration Cursors */

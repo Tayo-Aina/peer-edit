@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { usePeerDiscovery, DiscoveredPeer } from '../hooks/usePeerDiscovery';
+import { getElectronBridge } from '../utils/electronBridge';
 
 interface DiscoveryPanelProps {
   onConnect: (url: string) => void;
@@ -14,6 +15,19 @@ export function DiscoveryPanel({ onConnect, connected }: DiscoveryPanelProps) {
   const { peers, scanning, selfAddresses, rescan, saveRelay } = usePeerDiscovery();
   const [manualIp, setManualIp] = useState('');
   const [manualPort, setManualPort] = useState('9876');
+
+  // In Electron, prefill the port with THIS machine's actual relay port: the
+  // embedded relay may have fallen back to 9877+ when 9876 was busy at
+  // startup, and "connect to my own relay" must still work out of the box.
+  useEffect(() => {
+    const bridge = getElectronBridge();
+    if (!bridge) return;
+    let cancelled = false;
+    bridge.getRelayPort()
+      .then((port) => { if (!cancelled && Number.isFinite(port) && port > 0) setManualPort(String(port)); })
+      .catch(() => { /* keep default */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleManualConnect = () => {
     const address = manualIp.trim() || 'localhost';

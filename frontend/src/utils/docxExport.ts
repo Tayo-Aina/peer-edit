@@ -525,10 +525,11 @@ function collectImageSrcs(nodes: PMNode[] | undefined, into: Map<string, string>
 }
 
 /* ------------------------------------------------------------------ */
-/* Public entry point                                                  */
+/* Public entry points                                               */
 /* ------------------------------------------------------------------ */
 
-export async function exportToDocx(editor: Editor): Promise<void> {
+/** Build the .docx file for the current editor content as a Blob. */
+export async function buildDocxBlob(editor: Editor): Promise<Blob> {
   const json = editor.getJSON() as unknown as PMNode;
 
   // 1. Pre-decode images (async sizing) before the synchronous build.
@@ -547,7 +548,7 @@ export async function exportToDocx(editor: Editor): Promise<void> {
   const children = convertBlocks(json.content, DEFAULT_CTX);
   if (!children.length) children.push(new Paragraph({ children: [] }));
 
-  // 3. Build + download.
+  // 3. Build + pack.
   const doc = new Document({
     numbering: { config: numberingConfigs },
     styles: {
@@ -600,7 +601,12 @@ export async function exportToDocx(editor: Editor): Promise<void> {
     ],
   });
 
-  const blob = await Packer.toBlob(doc);
+  return Packer.toBlob(doc);
+}
+
+/** Thin download wrapper around {@link buildDocxBlob}. */
+export async function exportToDocx(editor: Editor): Promise<void> {
+  const blob = await buildDocxBlob(editor);
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

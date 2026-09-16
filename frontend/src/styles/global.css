@@ -128,6 +128,45 @@ input {
   letter-spacing: 0.02em;
 }
 
+/* Left cluster: File button + app name + document title, on ONE line.
+   min-width:0 lets the title truncate instead of pushing the status out. */
+.app-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.file-menu-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--titlebar-text);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.3125rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.file-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.file-menu-btn:active {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.app-header .doc-title {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 .status-indicator {
   display: flex;
   align-items: center;
@@ -135,6 +174,7 @@ input {
   font-size: 0.75rem;
   font-weight: 400;
   color: rgba(255, 255, 255, 0.85);
+  flex-shrink: 0;
 }
 
 .status-dot {

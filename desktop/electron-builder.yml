@@ -16,3 +16,7 @@ win:
       arch: x64
 portable:
   artifactName: PeerEdit.exe
+fileAssociations:
+  - ext: peeredit
+    name: PeerEdit Document
+    role: Editor

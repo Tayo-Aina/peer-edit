@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { getFriendlyName } from '../utils/names';
@@ -16,17 +16,26 @@ const CollaborationContext = createContext<CollaborationContextValue | null>(nul
 
 interface Props {
   relayUrl: string;
-  roomName: string;
+  /** Document identity — also used as the Y room name (one room per doc). */
+  docId: string;
+  /** Y.Doc owned by DocumentProvider (not created/destroyed here). */
+  ydoc: Y.Doc;
+  /** Resolves when IndexedDB has loaded into ydoc — connect only after. */
+  whenSynced: Promise<unknown>;
   userName?: string;
   children: React.ReactNode;
 }
 
-export function CollaborationProvider({ relayUrl, roomName, userName, children }: Props) {
-  const [value, setValue] = React.useState<CollaborationContextValue | null>(null);
+export function CollaborationProvider({ relayUrl, docId, ydoc, whenSynced, userName, children }: Props) {
+  const [value, setValue] = useState<CollaborationContextValue | null>(null);
 
   useEffect(() => {
-    const ydoc = new Y.Doc();
-    const provider = new WebsocketProvider(relayUrl, roomName, ydoc, {
+    let cancelled = false;
+    let provider: WebsocketProvider | null = null;
+
+    const roomName = docId;
+
+    provider = new WebsocketProvider(relayUrl, roomName, ydoc, {
       // Connect manually AFTER setting awareness: the Awareness constructor
       // seeds an empty `{}` local state, and broadcasting that would show us
       // as an "Unknown" user. Set the real name/color first.
@@ -43,13 +52,30 @@ export function CollaborationProvider({ relayUrl, roomName, userName, children }
     const displayName = userName ?? getFriendlyName();
     const color = getUserColor(ydoc.clientID);
 
-    // Set local awareness state BEFORE connecting.
-    provider.awareness.setLocalState({
-      name: displayName,
-      color,
-      cursor: null,
-    });
-    provider.connect();
+    // Gate network connect on IndexedDB readiness so an empty initial
+    // state can never clobber the persisted document.
+    Promise.resolve(whenSynced)
+      .then(() => {
+        if (cancelled || !provider) return;
+        // Set local awareness state BEFORE connecting.
+        provider.awareness.setLocalState({
+          name: displayName,
+          color,
+          cursor: null,
+        });
+        provider.connect();
+      })
+      .catch(() => {
+        // IndexedDB unavailable (private mode) -> still connect
+        // so collaboration works in-memory.
+        if (cancelled || !provider) return;
+        try {
+          provider.awareness.setLocalState({ name: displayName, color, cursor: null });
+          provider.connect();
+        } catch {
+          /* ignore */
+        }
+      });
 
     setValue({
       ydoc,
@@ -60,10 +86,15 @@ export function CollaborationProvider({ relayUrl, roomName, userName, children }
     });
 
     return () => {
-      provider.destroy();
-      ydoc.destroy();
+      cancelled = true;
+      try {
+        provider?.destroy();
+      } catch {
+        /* ignore */
+      }
+      // NOTE: ydoc is owned by DocumentProvider — never destroy it here.
     };
-  }, [relayUrl, roomName, userName]);
+  }, [relayUrl, docId, ydoc, whenSynced, userName]);
 
   if (!value) {
     return <div className="loading-state">Connecting to collaboration server...</div>;
@@ -80,4 +111,9 @@ export function useCollaboration(): CollaborationContextValue {
   const ctx = useContext(CollaborationContext);
   if (!ctx) throw new Error('useCollaboration must be used within CollaborationProvider');
   return ctx;
+}
+
+/** Null when offline (no relay) — lets EditorView/StatusBar render without a provider. */
+export function useOptionalCollaboration(): CollaborationContextValue | null {
+  return useContext(CollaborationContext);
 }

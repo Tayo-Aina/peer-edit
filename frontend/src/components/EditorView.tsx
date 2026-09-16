@@ -27,23 +27,36 @@ import { Pagination } from '../extensions/Pagination';
 import { SlashCommand } from '../extensions/slash/SlashCommand';
 import { FindReplace } from '../extensions/findReplace/FindReplace';
 import { fileToDataUrl } from '../utils/images';
-import { useCollaboration } from '../providers/CollaborationProvider';
+import { useOptionalCollaboration } from '../providers/CollaborationProvider';
+import { useDocument } from '../stores/documentStore';
 import { Toolbar } from './Toolbar';
 import { BubbleToolbar } from './BubbleToolbar';
 import { StatusBar } from './StatusBar';
 import { FindReplacePanel } from './FindReplacePanel';
 import '../styles/overlays.css';
 
-export function EditorView() {
-  const { ydoc, provider, userName, color } = useCollaboration();
+interface EditorViewProps {
+  /** Lifted editor instance for Backstage Info/Export/Import. */
+  onEditorReady?: (editor: Editor | null) => void;
+  /** Opens the File/Backstage place. */
+  onOpenFileMenu?: () => void;
+}
+
+export function EditorView({ onEditorReady, onOpenFileMenu }: EditorViewProps) {
+  const collab = useOptionalCollaboration();
+  const { ydoc } = useDocument();
+
+  const provider = collab?.provider ?? null;
+  const userName = collab?.userName ?? 'You';
+  const color = collab?.color ?? '#4ECDC4';
 
   // Ref mirror of the editor: handlePaste/handleDrop are configured once
   // inside useEditor (when `editor` is still null), so they must read the
   // live instance from here instead of closing over the stale variable.
   const editorRef = React.useRef<Editor | null>(null);
 
-  const editor = useEditor({
-    extensions: [
+  const extensions = React.useMemo(() => {
+    const list = [
       StarterKit.configure({
         // CRITICAL: Disable StarterKit's built-in undo/redo history.
         // Yjs manages its own undo/redo via the Collaboration extension.
@@ -52,10 +65,6 @@ export function EditorView() {
       }),
       Collaboration.configure({
         document: ydoc,
-      }),
-      CollaborationCursor.configure({
-        provider: provider,
-        user: { name: userName, color: color },
       }),
       Placeholder.configure({
         placeholder: 'Start typing collaboratively...',
@@ -90,7 +99,25 @@ export function EditorView() {
       Pagination,
       SlashCommand,
       FindReplace,
-    ],
+    ];
+    // CollaborationCursor needs a live provider — omit offline so the
+    // editor still mounts for IndexedDB-only editing.
+    if (provider) {
+      list.splice(
+        2,
+        0,
+        CollaborationCursor.configure({
+          provider,
+          user: { name: userName, color },
+        }) as never,
+      );
+    }
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ydoc, provider]);
+
+  const editor = useEditor({
+    extensions,
     editorProps: {
       handlePaste: (view, event) => {
         const files = Array.from(event.clipboardData?.files ?? []);
@@ -137,9 +164,14 @@ export function EditorView() {
     editorRef.current = editor;
   }, [editor]);
 
+  React.useEffect(() => {
+    onEditorReady?.(editor ?? null);
+    return () => onEditorReady?.(null);
+  }, [editor, onEditorReady]);
+
   return (
     <div className="editor-container">
-      <Toolbar editor={editor} />
+      <Toolbar editor={editor} onOpenFileMenu={onOpenFileMenu} />
       {editor && <BubbleToolbar editor={editor} />}
       <div
         className="editor-content"

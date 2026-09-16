@@ -1,6 +1,6 @@
-// PeerEdit preload — bridges LAN peer discovery from the Electron main
-// process into the renderer without exposing Node. Rendered via contextBridge
-// (contextIsolation is on, nodeIntegration is off, sandbox is off).
+// PeerEdit preload — bridges LAN peer discovery + native file IO from the
+// Electron main process into the renderer without exposing Node. Rendered via
+// contextBridge (contextIsolation is on, nodeIntegration is off, sandbox off).
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('peeredit', {
@@ -21,5 +21,13 @@ contextBridge.exposeInMainWorld('peeredit', {
     const handler = (_event, peer) => callback(peer);
     ipcRenderer.on('peeredit:peer-down', handler);
     return () => ipcRenderer.removeListener('peeredit:peer-down', handler);
+  },
+  // Native file dialogs + fs access (main process only). Bytes cross IPC as
+  // Uint8Array via structured clone.
+  file: {
+    openDialog: (acceptDotDocx) => ipcRenderer.invoke('peeredit:file:open', !!acceptDotDocx),
+    saveDialog: (suggestedName) => ipcRenderer.invoke('peeredit:file:save', String(suggestedName || 'Untitled.peeredit')),
+    readFile: (filePath) => ipcRenderer.invoke('peeredit:file:read', filePath),
+    writeFile: (filePath, bytes) => ipcRenderer.invoke('peeredit:file:write', filePath, bytes),
   },
 });

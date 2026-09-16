@@ -42,6 +42,37 @@ ipcMain.handle('peeredit:local-addresses', () => getLocalAddresses());
 // the preferred port was busy at startup; the renderer uses it to pre-fill the
 // manual-connect form so "connect to my own relay" always works.
 ipcMain.handle('peeredit:relay-port', () => relayPort);
+// Native file IO: dialogs + fs live in main only; bytes cross IPC as
+// Uint8Array via structured clone (see desktop/preload.js + fileBridge.ts).
+ipcMain.handle('peeredit:file:open', async (_event, acceptDotDocx) => {
+  const filters = acceptDotDocx
+    ? [{ name: 'PeerEdit / Word', extensions: ['peeredit', 'docx'] }]
+    : [{ name: 'PeerEdit', extensions: ['peeredit'] }];
+  const result = await dialog.showOpenDialog(windows[0] || null, {
+    title: 'Open document', filters, properties: ['openFile'],
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  return { filePath: result.filePaths[0] };
+});
+ipcMain.handle('peeredit:file:save', async (_event, suggestedName) => {
+  const safe = String(suggestedName || 'Untitled.peeredit');
+  const result = await dialog.showSaveDialog(windows[0] || null, {
+    title: 'Save document', defaultPath: safe,
+    filters: [
+      { name: 'PeerEdit', extensions: ['peeredit'] },
+      { name: 'All files', extensions: ['*'] },
+    ],
+  });
+  if (result.canceled || !result.filePath) return null;
+  return { filePath: result.filePath };
+});
+ipcMain.handle('peeredit:file:read', async (_event, filePath) => {
+  const data = await fs.promises.readFile(String(filePath));
+  return new Uint8Array(data);
+});
+ipcMain.handle('peeredit:file:write', async (_event, filePath, bytes) => {
+  await fs.promises.writeFile(String(filePath), Buffer.from(bytes));
+});
 function isLoopback(req) {
   const r = (req.socket && req.socket.remoteAddress) || '';
   return r === '127.0.0.1' || r === '::1' || r === '::ffff:127.0.0.1' || r === 'localhost';

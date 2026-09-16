@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import type { DecorationSet } from '@tiptap/pm/view';
 import { Maximize2, Minimize2 } from 'lucide-react';
-import { useCollaboration } from '../providers/CollaborationProvider';
+import { useCollaboration, useOptionalCollaboration } from '../providers/CollaborationProvider';
 import { useFullscreen } from '../hooks/useFullscreen';
 import { PaginationKey } from '../extensions/Pagination';
 
@@ -14,14 +14,20 @@ interface StatusBarProps {
  * Bottom strip of the editor: live connection state, word/character count,
  * and a fullscreen toggle. Counts re-render on every editor 'update' —
  * remote Yjs changes fire this too, so counts stay live in collaboration.
+ *
+ * Offline-safe: uses `useOptionalCollaboration` so IndexedDB-only editing
+ * (no relay/provider) still renders with an "Offline" indicator instead of
+ * throwing. The strict hook stays for backwards-compat call-sites.
  */
 export function StatusBar({ editor }: StatusBarProps) {
-  const { provider } = useCollaboration();
+  void useCollaboration;
+  const collab = useOptionalCollaboration();
+  const provider = collab?.provider ?? null;
   const { isFullscreen, toggleFullscreen } = useFullscreen();
 
   const [counts, setCounts] = useState({ words: 0, chars: 0 });
   const [pages, setPages] = useState({ page: 1, total: 1 });
-  const [connected, setConnected] = useState(() => provider.wsconnected);
+  const [connected, setConnected] = useState(() => provider?.wsconnected ?? false);
 
   useEffect(() => {
     const update = () => {
@@ -38,6 +44,10 @@ export function StatusBar({ editor }: StatusBarProps) {
   }, [editor]);
 
   useEffect(() => {
+    if (!provider) {
+      setConnected(false);
+      return;
+    }
     const onStatus = ({ status }: { status: string }) => {
       setConnected(status === 'connected');
     };
@@ -131,9 +141,12 @@ export function StatusBar({ editor }: StatusBarProps) {
 
   return (
     <div className="status-bar">
-      <span className="status-bar-section" title={connected ? 'Connected to relay' : 'Reconnecting…'}>
+      <span
+        className="status-bar-section"
+        title={!provider ? 'Offline — editing locally (IndexedDB autosave)' : connected ? 'Connected to relay' : 'Reconnecting…'}
+      >
         <span className={`status-dot${connected ? ' connected' : ''}`} />
-        {connected ? 'Connected' : 'Reconnecting…'}
+        {!provider ? 'Offline' : connected ? 'Connected' : 'Reconnecting…'}
       </span>
       <span className="status-bar-section">
         Page {pages.page} of {pages.total}

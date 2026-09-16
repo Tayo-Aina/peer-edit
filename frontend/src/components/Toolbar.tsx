@@ -25,6 +25,8 @@ import '../styles/toolbar.css';
 
 interface ToolbarProps {
   editor: Editor | null;
+  /** Opens the File/Backstage place. */
+  onOpenFileMenu?: () => void;
 }
 
 interface ToolbarButtonProps {
@@ -101,7 +103,7 @@ const RIBBON_TABS: { id: RibbonTab; label: string }[] = [
   { id: 'view', label: 'View' },
 ];
 
-export function Toolbar({ editor }: ToolbarProps) {
+export function Toolbar({ editor, onOpenFileMenu }: ToolbarProps) {
   const [tab, setTab] = useState<RibbonTab>('home');
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -180,9 +182,14 @@ export function Toolbar({ editor }: ToolbarProps) {
 
   return (
     <div className="ribbon" role="toolbar" aria-label="Ribbon">
-      {/* ---- Tab row: quick-access undo/redo + tabs, like Word ---- */}
+      {/* ---- Tab row: File entry + quick-access undo/redo + tabs, like Word ---- */}
       <div className="ribbon-top">
         <div className="ribbon-qat">
+          <Button
+            onClick={() => onOpenFileMenu?.()}
+            icon={<span style={{ fontSize: 13, fontWeight: 600 }}>File</span>}
+            title="File — open the Backstage (New, Open, Save, Export, Info, Share)"
+          />
           <Button
             onClick={() => editor.chain().focus().undo().run()}
             disabled={!editor.can().undo()}

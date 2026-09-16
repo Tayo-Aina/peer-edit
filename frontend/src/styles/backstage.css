@@ -1,0 +1,405 @@
+/*
+ * Backstage (File menu) + recovery banner.
+ * Word-style full-screen place: blue rail on the left, content pane right.
+ * Colors come exclusively from CSS variables (see global.css) — dark mode
+ * needs zero extra rules here, and no <style> is ever injected dynamically
+ * (second-window paint bug).
+ *
+ * Z-scale: backstage overlay sits at 1100 — above discovery/slash (1000),
+ * below confirm dialogs (1200).
+ */
+
+.backstage-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 4vh 4vw;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.backstage-shell {
+  display: flex;
+  flex: 1;
+  max-width: 960px;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ---- Left rail (Word backstage blue) ---- */
+.backstage-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 220px;
+  flex-shrink: 0;
+  padding: 12px 8px;
+  background: var(--titlebar-bg);
+  color: var(--titlebar-text);
+  overflow-y: auto;
+}
+
+.backstage-rail-title {
+  padding: 4px 12px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.backstage-rail-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--titlebar-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.backstage-rail-tab:hover {
+  background: var(--titlebar-hover);
+}
+
+.backstage-rail-tab.active {
+  background: var(--titlebar-hover);
+  font-weight: 600;
+}
+
+.backstage-rail-tab:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.backstage-rail-spacer {
+  flex: 1;
+}
+
+.backstage-rail-back {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--titlebar-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.backstage-rail-back:hover {
+  background: var(--titlebar-hover);
+}
+
+/* ---- Content pane ---- */
+.backstage-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-surface);
+  color: var(--text-main);
+}
+
+.backstage-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.backstage-pane-title {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.backstage-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+}
+
+.backstage-close:hover {
+  background: var(--hover-bg);
+  color: var(--text-main);
+}
+
+.backstage-pane-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.backstage-pane-body:focus {
+  outline: none;
+}
+
+.backstage-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.backstage-text {
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.backstage-muted {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.backstage-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.backstage-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text-main);
+}
+
+.backstage-btn:hover:not(:disabled) {
+  background: var(--bg-color);
+}
+
+.backstage-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.backstage-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.backstage-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.backstage-btn:focus-visible,
+.backstage-rail-tab:focus-visible,
+.backstage-rail-back:focus-visible,
+.backstage-close:focus-visible,
+.backstage-recent-remove:focus-visible,
+.backstage-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.backstage-input {
+  width: 100%;
+  max-width: 380px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--text-main);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+}
+
+.backstage-notice {
+  padding: 9px 12px;
+  font-size: 13px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-main);
+}
+
+.backstage-notice-error {
+  border-color: var(--border-strong);
+  border-left: 3px solid #d13438;
+}
+
+.backstage-notice-success {
+  border-left: 3px solid var(--accent);
+}
+
+.backstage-warnings {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ---- Recent list (Home) ---- */
+.backstage-recent-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.backstage-recent-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.backstage-recent-item:hover {
+  background: var(--hover-bg);
+}
+
+.backstage-recent-item + .backstage-recent-item {
+  border-top: 1px solid var(--border);
+}
+
+.backstage-recent-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.backstage-recent-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.backstage-recent-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.backstage-recent-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.backstage-recent-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+}
+
+.backstage-recent-remove:hover {
+  background: var(--hover-bg);
+  color: var(--text-main);
+}
+
+.backstage-empty {
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+}
+
+/* ---- Info / Share definition rows ---- */
+.backstage-kv {
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  gap: 6px 10px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.backstage-kv-dt {
+  color: var(--text-muted);
+}
+
+.backstage-kv-dd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-main);
+}
+
+.backstage-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-main);
+}
+
+.backstage-copy-btn:hover {
+  background: var(--hover-bg);
+}
+
+/* ---- Crash-recovery banner (non-modal strip above the editor) ---- */
+.recovery-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.recovery-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.recovery-banner-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}

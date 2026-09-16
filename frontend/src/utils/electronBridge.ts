@@ -8,12 +8,21 @@ export interface RawPeer {
   name?: string;
 }
 
+export interface PeerEditFileBridge {
+  openDialog: (acceptDotDocx: boolean) => Promise<{ filePath: string } | null>;
+  saveDialog: (suggestedName: string) => Promise<{ filePath: string } | null>;
+  readFile: (filePath: string) => Promise<Uint8Array>;
+  writeFile: (filePath: string, bytes: Uint8Array) => Promise<void>;
+}
+
 export interface PeerEditBridge {
   listPeers: () => Promise<RawPeer[]>;
   getLocalAddresses: () => Promise<string[]>;
   getRelayPort: () => Promise<number>;
   onPeerUp: (callback: (peer: RawPeer) => void) => () => void;
   onPeerDown: (callback: (peer: RawPeer) => void) => () => void;
+  /** Present in Electron when desktop/preload.js exposes file IPC. */
+  file?: PeerEditFileBridge;
 }
 
 declare global {
